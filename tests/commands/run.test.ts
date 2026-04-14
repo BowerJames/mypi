@@ -109,9 +109,9 @@ describe("filterPassthroughArgs", () => {
   });
 
   test("filters --profile with separate value", () => {
-    expect(filterPassthroughArgs(["--profile", "reviewer", "do something"])).toEqual(
-      ["do something"],
-    );
+    expect(
+      filterPassthroughArgs(["--profile", "reviewer", "do something"]),
+    ).toEqual(["do something"]);
   });
 
   test("filters -p with separate value", () => {
@@ -129,6 +129,20 @@ describe("filterPassthroughArgs", () => {
   test("filters -pvalue form", () => {
     expect(filterPassthroughArgs(["-previewer", "do something"])).toEqual([
       "do something",
+    ]);
+  });
+
+  test("does not filter --prompt (double dash)", () => {
+    expect(filterPassthroughArgs(["--prompt", "custom"])).toEqual([
+      "--prompt",
+      "custom",
+    ]);
+  });
+
+  test("does not filter --print (double dash)", () => {
+    expect(filterPassthroughArgs(["--print", "task"])).toEqual([
+      "--print",
+      "task",
     ]);
   });
 
@@ -152,9 +166,10 @@ describe("filterPassthroughArgs", () => {
     expect(filterPassthroughArgs([])).toEqual([]);
   });
 
-  test("does not filter --prompt or --skill (pi flags)", () => {
-    expect(
-      filterPassthroughArgs(["--prompt", "custom", "--skill", "my-skill"]),
-    ).toEqual(["--prompt", "custom", "--skill", "my-skill"]);
+  test("does not filter --skill (pi flag)", () => {
+    expect(filterPassthroughArgs(["--skill", "my-skill"])).toEqual([
+      "--skill",
+      "my-skill",
+    ]);
   });
 });

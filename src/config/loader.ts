@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { access, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import type { ConfigValidationError, MypiConfig } from "./schema.js";
@@ -243,7 +243,7 @@ export async function initConfig(cwd: string, force = false): Promise<string> {
 
   if (!force) {
     try {
-      await readFile(filePath, "utf-8");
+      await access(filePath);
       throw new Error(
         `mypi.yaml already exists in ${cwd}. Use --force to overwrite.`,
       );
@@ -251,7 +251,7 @@ export async function initConfig(cwd: string, force = false): Promise<string> {
       if (err instanceof Error && err.message.includes("already exists")) {
         throw err;
       }
-      // File doesn't exist, proceed
+      // File doesn't exist (ENOENT), proceed
     }
   }
 

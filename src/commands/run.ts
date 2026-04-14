@@ -58,8 +58,13 @@ export function filterPassthroughArgs(rawArgs: string[]): string[] {
       continue;
     }
 
-    // Handle --profile=value and -pvalue forms
-    if (arg.startsWith("--profile=") || arg.startsWith("-p")) {
+    // Handle --profile=value form
+    if (arg.startsWith("--profile=")) {
+      continue;
+    }
+
+    // Handle -pvalue form (e.g., -passistant), but not --p or -p-
+    if (/^-p(?!-)/.test(arg)) {
       continue;
     }
 

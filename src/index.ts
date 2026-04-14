@@ -1,7 +1,9 @@
 import { defineCommand, renderUsage, runMain } from "citty";
 import { runConfigure } from "./commands/configure.js";
 import { runInit } from "./commands/init.js";
-import { runProfile } from "./commands/run.js";
+import { filterPassthroughArgs, runProfile } from "./commands/run.js";
+
+const SUBCOMMAND_NAMES = new Set(["init", "configure"]);
 
 const initCmd = defineCommand({
   meta: {
@@ -49,55 +51,21 @@ const main = defineCommand({
     },
   },
   async run({ args, rawArgs }) {
-    const firstNonFlag = rawArgs.find((arg) => !arg.startsWith("-"));
+    const { subcommand } = resolveRouting(rawArgs);
 
-    // Route to subcommands manually (avoids citty's subcommand detection
-    // which treats the first non-flag arg as a subcommand name even when
-    // it's a value consumed by --profile)
-    if (firstNonFlag === "init") {
+    if (subcommand === "init") {
       const force = rawArgs.includes("--force") || rawArgs.includes("-f");
       await runInit(process.cwd(), force);
       return;
     }
 
-    if (firstNonFlag === "configure") {
+    if (subcommand === "configure") {
       await runConfigure(process.cwd());
       return;
     }
 
     // Default: launch pi with profile
-    const passthrough: string[] = [];
-    let skipNext = false;
-
-    for (let i = 0; i < rawArgs.length; i++) {
-      const arg = rawArgs[i];
-
-      if (skipNext) {
-        skipNext = false;
-        continue;
-      }
-
-      if (arg === "--profile" || arg === "-p") {
-        skipNext = true;
-        continue;
-      }
-
-      // Handle --profile=value and -pvalue forms
-      if (arg.startsWith("--profile=") || arg.startsWith("-p")) {
-        continue;
-      }
-
-      if (
-        arg === "--help" ||
-        arg === "-h" ||
-        arg === "--version" ||
-        arg === "-v"
-      ) {
-        continue;
-      }
-
-      passthrough.push(arg);
-    }
+    const passthrough = filterPassthroughArgs(rawArgs);
 
     await runProfile(
       process.cwd(),
@@ -107,27 +75,67 @@ const main = defineCommand({
   },
 });
 
+/**
+ * Determines routing: whether the user is invoking a subcommand.
+ * Handles the edge case where `--profile init` should NOT be treated
+ * as a subcommand invocation.
+ */
+function resolveRouting(rawArgs: string[]): {
+  subcommand: string | null;
+} {
+  for (let i = 0; i < rawArgs.length; i++) {
+    const arg = rawArgs[i];
+
+    if (arg === "--profile" || arg === "-p") {
+      // The next arg is the profile value — not a subcommand
+      return { subcommand: null };
+    }
+
+    if (arg.startsWith("--profile=")) {
+      // Profile value is embedded — not a subcommand
+      return { subcommand: null };
+    }
+
+    // -pvalue form: profile value is embedded
+    if (/^-p(?!-)/.test(arg)) {
+      return { subcommand: null };
+    }
+
+    // First non-flag arg is the subcommand (if it matches)
+    if (!arg.startsWith("-")) {
+      if (SUBCOMMAND_NAMES.has(arg)) {
+        return { subcommand: arg };
+      }
+      // First non-flag arg is not a subcommand — no routing
+      return { subcommand: null };
+    }
+  }
+
+  return { subcommand: null };
+}
+
 // Pre-process raw args to handle subcommand help before citty's runMain
 // intercepts --help (since we don't use citty's subCommands mechanism)
 const rawArgs = process.argv.slice(2);
-const firstNonFlag = rawArgs.find((arg) => !arg.startsWith("-"));
+const hasHelpFlag = rawArgs.includes("--help") || rawArgs.includes("-h");
+const { subcommand } = resolveRouting(rawArgs);
 
-if (
-  firstNonFlag === "init" &&
-  (rawArgs.includes("--help") || rawArgs.includes("-h"))
-) {
-  renderUsage(initCmd, main).then((usage) => {
-    console.log(usage);
-    process.exit(0);
-  });
-} else if (
-  firstNonFlag === "configure" &&
-  (rawArgs.includes("--help") || rawArgs.includes("-h"))
-) {
-  renderUsage(configureCmd, main).then((usage) => {
-    console.log(usage);
-    process.exit(0);
-  });
+// Only show subcommand help if the help flag comes after the subcommand name
+if (subcommand && hasHelpFlag) {
+  const subcommandIndex = rawArgs.indexOf(subcommand);
+  const helpIndex = rawArgs.findIndex((a) => a === "--help" || a === "-h");
+
+  // Only treat as subcommand help if help flag appears after subcommand name
+  if (helpIndex > subcommandIndex) {
+    const cmd = subcommand === "init" ? initCmd : configureCmd;
+    renderUsage(cmd, main).then((usage) => {
+      console.log(usage);
+      process.exit(0);
+    });
+  } else {
+    // --help before subcommand name → show main help (citty handles this)
+    runMain(main);
+  }
 } else {
   runMain(main);
 }
