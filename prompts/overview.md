@@ -1,5 +1,5 @@
 ---
-description: A placeholder prompt template. Replace with your own.
+description: Overview of the repository, core components, and open issues
 ---
 
-Provide an overview of the codebase.
+Please give me an overview of this repository, the core components and how they wire together as well as an overview of the open issues.
