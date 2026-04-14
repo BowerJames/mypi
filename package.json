@@ -1,0 +1,6 @@
+{
+  "name": "mypi",
+  "version": "0.1.0",
+  "description": "CLI tool that manages pi coding agent profiles, bundling extensions, skills, and prompt templates",
+  "type": "module",
+}
