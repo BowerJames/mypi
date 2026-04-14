@@ -216,7 +216,10 @@ export async function writeConfig(
 ): Promise<string> {
   const filePath = resolve(cwd, "mypi.yaml");
   // Build a clean object without empty arrays
-  const obj: Record<string, unknown> = {
+  const obj: {
+    default: string;
+    profiles: Record<string, Record<string, unknown>>;
+  } = {
     default: config.default,
     profiles: {},
   };

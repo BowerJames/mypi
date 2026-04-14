@@ -128,7 +128,7 @@ if (subcommand && hasHelpFlag) {
   // Only treat as subcommand help if help flag appears after subcommand name
   if (helpIndex > subcommandIndex) {
     const cmd = subcommand === "init" ? initCmd : configureCmd;
-    renderUsage(cmd, main).then((usage) => {
+    renderUsage(cmd as typeof main, main).then((usage) => {
       console.log(usage);
       process.exit(0);
     });

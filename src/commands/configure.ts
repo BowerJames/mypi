@@ -19,7 +19,7 @@ async function mainMenu(): Promise<string> {
 async function editProfile(
   profile: Profile,
   resources: Awaited<ReturnType<typeof discoverAll>>,
-  isExisting: boolean,
+  _isExisting: boolean,
 ): Promise<Profile> {
   const updated = { ...profile };
 

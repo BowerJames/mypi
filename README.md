@@ -32,9 +32,9 @@ The wizard lets you:
 ### Launch pi with a profile
 
 ```bash
-mypy                           # Uses the default profile
-mypy --profile reviewer        # Uses the "reviewer" profile
-mypy --profile reviewer @file  # Profile + passthrough args to pi
+mypi                           # Uses the default profile
+mypi --profile reviewer        # Uses the "reviewer" profile
+mypi --profile reviewer @file  # Profile + passthrough args to pi
 ```
 
 All arguments after `--profile <name>` are forwarded to the pi command.
@@ -42,9 +42,9 @@ All arguments after `--profile <name>` are forwarded to the pi command.
 ### Help
 
 ```bash
-mypy --help           # Main help
-mypy init --help      # Init help
-mypy configure --help # Configure help
+mypi --help           # Main help
+mypi init --help      # Init help
+mypi configure --help # Configure help
 ```
 
 ## Configuration
