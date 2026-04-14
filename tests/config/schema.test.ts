@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { validateConfig, formatErrors } from "../../src/config/loader.js";
+import { formatErrors, validateConfig } from "../../src/config/loader.js";
 
 describe("validateConfig", () => {
   test("validates a correct config", () => {
@@ -18,11 +18,11 @@ describe("validateConfig", () => {
     const { config, errors } = validateConfig(data);
     expect(errors).toHaveLength(0);
     expect(config).not.toBeNull();
-    expect(config!.default).toBe("assistant");
-    expect(config!.profiles.assistant.cmd).toBe("pi");
-    expect(config!.profiles.assistant.extensions).toEqual(["mode"]);
-    expect(config!.profiles.assistant.skills).toEqual(["deployments"]);
-    expect(config!.profiles.assistant.prompts).toEqual(["overview"]);
+    expect(config?.default).toBe("assistant");
+    expect(config?.profiles.assistant.cmd).toBe("pi");
+    expect(config?.profiles.assistant.extensions).toEqual(["mode"]);
+    expect(config?.profiles.assistant.skills).toEqual(["deployments"]);
+    expect(config?.profiles.assistant.prompts).toEqual(["overview"]);
   });
 
   test("validates config with empty optional arrays", () => {
@@ -37,9 +37,9 @@ describe("validateConfig", () => {
 
     const { config, errors } = validateConfig(data);
     expect(errors).toHaveLength(0);
-    expect(config!.profiles.reviewer.extensions).toEqual([]);
-    expect(config!.profiles.reviewer.skills).toEqual([]);
-    expect(config!.profiles.reviewer.prompts).toEqual([]);
+    expect(config?.profiles.reviewer.extensions).toEqual([]);
+    expect(config?.profiles.reviewer.skills).toEqual([]);
+    expect(config?.profiles.reviewer.prompts).toEqual([]);
   });
 
   test("errors when config is not an object", () => {

@@ -10,9 +10,9 @@
     "dev": "bun run src/index.ts",
     "build": "mkdir -p dist && { echo '#!/usr/bin/env bun'; bun build src/index.ts --target bun; } > dist/index.js && chmod +x dist/index.js",
     "test": "bun test",
-    "lint": "biome lint src/",
-    "format": "biome check --fix src/",
-    "format:check": "biome check src/"
+    "lint": "biome lint src/ tests/",
+    "format": "biome check --fix src/ tests/",
+    "format:check": "biome check src/ tests/"
   },
   "dependencies": {
     "@inquirer/prompts": "^7.4.1",

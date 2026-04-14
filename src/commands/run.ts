@@ -98,7 +98,7 @@ export async function runProfile(
     process.exit(1);
   }
 
-  const name = profileName ?? config.default;
+  const name = profileName || config.default;
 
   if (!config.profiles[name]) {
     const available = Object.keys(config.profiles).join(", ");

@@ -1,8 +1,12 @@
-import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { mkdtemp, rm, readFile } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadConfig, initConfig, writeConfig } from "../../src/config/loader.js";
+import {
+  initConfig,
+  loadConfig,
+  writeConfig,
+} from "../../src/config/loader.js";
 import type { MypiConfig } from "../../src/config/schema.js";
 
 describe("loadConfig", () => {
@@ -38,9 +42,9 @@ profiles:
     const { config, errors } = await loadConfig(tempDir);
     expect(errors).toHaveLength(0);
     expect(config).not.toBeNull();
-    expect(config!.default).toBe("assistant");
-    expect(config!.profiles.assistant.cmd).toBe("pi");
-    expect(config!.profiles.assistant.extensions).toEqual(["mode"]);
+    expect(config?.default).toBe("assistant");
+    expect(config?.profiles.assistant.cmd).toBe("pi");
+    expect(config?.profiles.assistant.extensions).toEqual(["mode"]);
   });
 
   test("errors on invalid YAML", async () => {
@@ -132,10 +136,10 @@ describe("writeConfig", () => {
     // Verify it round-trips through loadConfig
     const { config: loaded } = await loadConfig(tempDir);
     expect(loaded).not.toBeNull();
-    expect(loaded!.default).toBe("test");
-    expect(loaded!.profiles.test.cmd).toBe("pi -p");
-    expect(loaded!.profiles.test.extensions).toEqual(["mode"]);
-    expect(loaded!.profiles.test.prompts).toEqual(["review"]);
+    expect(loaded?.default).toBe("test");
+    expect(loaded?.profiles.test.cmd).toBe("pi -p");
+    expect(loaded?.profiles.test.extensions).toEqual(["mode"]);
+    expect(loaded?.profiles.test.prompts).toEqual(["review"]);
   });
 
   test("omits empty arrays from output", async () => {
