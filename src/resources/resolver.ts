@@ -3,7 +3,12 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const PACKAGE_ROOT = resolve(__dirname, "..", "..");
+
+// When running from source: __dirname = src/resources/ → go up 2 levels
+// When running bundled:  __dirname = dist/           → go up 0 levels (resources are copied into dist/)
+const PACKAGE_ROOT = __dirname.endsWith("dist")
+  ? __dirname
+  : resolve(__dirname, "..", "..");
 
 const EXTENSIONS_DIR = resolve(PACKAGE_ROOT, "extensions");
 const SKILLS_DIR = resolve(PACKAGE_ROOT, "skills");

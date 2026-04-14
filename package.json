@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "bun run src/index.ts",
-    "build": "mkdir -p dist && { echo '#!/usr/bin/env bun'; bun build src/index.ts --target bun; } > dist/index.js && chmod +x dist/index.js",
+    "build": "mkdir -p dist && { echo '#!/usr/bin/env bun'; bun build src/index.ts --target bun; } > dist/index.js && chmod +x dist/index.js && cp -r extensions dist/extensions && cp -r skills dist/skills && cp -r prompts dist/prompts",
     "test": "bun test",
     "lint": "biome lint src/ tests/ extensions/",
     "format": "biome check --fix src/ tests/ extensions/",
