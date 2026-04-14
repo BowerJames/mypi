@@ -258,6 +258,11 @@ export async function initConfig(cwd: string, force = false): Promise<string> {
     }
   }
 
-  await writeFile(filePath, DEFAULT_CONFIG, "utf-8");
+  try {
+    await writeFile(filePath, DEFAULT_CONFIG, "utf-8");
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to write mypi.yaml: ${message}`);
+  }
   return filePath;
 }

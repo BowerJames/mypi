@@ -39,6 +39,9 @@ mypi --profile reviewer @file  # Profile + passthrough args to pi
 
 All arguments after `--profile <name>` are forwarded to the pi command.
 
+> **Note:** `--help` and `-h` are intercepted by mypi and not forwarded to pi.
+> To view pi's help, run `pi` directly.
+
 ### Help
 
 ```bash

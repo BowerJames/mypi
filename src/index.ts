@@ -87,7 +87,8 @@ function resolveRouting(rawArgs: string[]): {
     const arg = rawArgs[i];
 
     if (arg === "--profile" || arg === "-p") {
-      // The next arg is the profile value — not a subcommand
+      // User typed --profile/-p, so this is a profile invocation
+      // regardless of whether a value follows
       return { subcommand: null };
     }
 

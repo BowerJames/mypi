@@ -172,4 +172,12 @@ describe("filterPassthroughArgs", () => {
       "my-skill",
     ]);
   });
+
+  test("does not eat next arg when --profile is last arg", () => {
+    expect(filterPassthroughArgs(["--profile"])).toEqual([]);
+  });
+
+  test("does not eat next arg when -p is last arg", () => {
+    expect(filterPassthroughArgs(["-p"])).toEqual([]);
+  });
 });

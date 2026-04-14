@@ -54,7 +54,10 @@ export function filterPassthroughArgs(rawArgs: string[]): string[] {
     }
 
     if (arg === "--profile" || arg === "-p") {
-      skipNext = true;
+      // Only skip next arg if one exists (i.e., --profile isn't the last arg)
+      if (i + 1 < rawArgs.length) {
+        skipNext = true;
+      }
       continue;
     }
 
