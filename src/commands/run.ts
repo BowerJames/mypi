@@ -1,8 +1,82 @@
-import { resolve } from "node:path";
 import { spawn } from "node:child_process";
-import { loadConfig, formatErrors } from "../config/loader.js";
+import { formatErrors, loadConfig } from "../config/loader.js";
 import { resolveResources } from "../resources/resolver.js";
-import type { MypiConfig } from "../config/schema.js";
+import type { ResolveResult } from "../resources/resolver.js";
+import { splitCommand } from "../utils/shell.js";
+
+export interface ProfileConfig {
+  cmd: string;
+  extensions?: string[];
+  skills?: string[];
+  prompts?: string[];
+}
+
+/**
+ * Builds the full command array for spawning pi from a profile configuration.
+ */
+export function buildProfileCommand(
+  profile: ProfileConfig,
+  resolved: ResolveResult,
+  passthroughArgs: string[],
+): string[] {
+  const cmdParts: string[] = [...splitCommand(profile.cmd)];
+
+  for (const ext of resolved.extensions) {
+    cmdParts.push("-e", ext);
+  }
+
+  for (const skill of resolved.skills) {
+    cmdParts.push("--skill", skill);
+  }
+
+  for (const prompt of resolved.prompts) {
+    cmdParts.push("--prompt-template", prompt);
+  }
+
+  cmdParts.push(...passthroughArgs);
+
+  return cmdParts;
+}
+
+/**
+ * Filters passthrough args from raw CLI args, removing mypi-specific flags.
+ */
+export function filterPassthroughArgs(rawArgs: string[]): string[] {
+  const passthrough: string[] = [];
+  let skipNext = false;
+
+  for (let i = 0; i < rawArgs.length; i++) {
+    const arg = rawArgs[i];
+
+    if (skipNext) {
+      skipNext = false;
+      continue;
+    }
+
+    if (arg === "--profile" || arg === "-p") {
+      skipNext = true;
+      continue;
+    }
+
+    // Handle --profile=value and -pvalue forms
+    if (arg.startsWith("--profile=") || arg.startsWith("-p")) {
+      continue;
+    }
+
+    if (
+      arg === "--help" ||
+      arg === "-h" ||
+      arg === "--version" ||
+      arg === "-v"
+    ) {
+      continue;
+    }
+
+    passthrough.push(arg);
+  }
+
+  return passthrough;
+}
 
 export async function runProfile(
   cwd: string,
@@ -41,23 +115,7 @@ export async function runProfile(
     );
   }
 
-  // Build the command
-  const cmdParts: string[] = [...profile.cmd.split(" ")];
-
-  for (const ext of resolved.extensions) {
-    cmdParts.push("-e", ext);
-  }
-
-  for (const skill of resolved.skills) {
-    cmdParts.push("--skill", skill);
-  }
-
-  for (const prompt of resolved.prompts) {
-    cmdParts.push("--prompt-template", prompt);
-  }
-
-  cmdParts.push(...args);
-
+  const cmdParts = buildProfileCommand(profile, resolved, args);
   const [bin, ...binArgs] = cmdParts;
 
   const child = spawn(bin, binArgs, {

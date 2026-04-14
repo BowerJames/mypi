@@ -1,4 +1,3 @@
-import { resolve } from "node:path";
 import { initConfig } from "../config/loader.js";
 
 export async function runInit(cwd: string, force: boolean): Promise<void> {

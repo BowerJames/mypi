@@ -1,7 +1,37 @@
-import { defineCommand, runMain } from "citty";
+import { defineCommand, renderUsage, runMain } from "citty";
+import { runConfigure } from "./commands/configure.js";
 import { runInit } from "./commands/init.js";
 import { runProfile } from "./commands/run.js";
-import { runConfigure } from "./commands/configure.js";
+
+const initCmd = defineCommand({
+  meta: {
+    name: "init",
+    description:
+      "Create a mypi.yaml configuration file in the current directory.",
+  },
+  args: {
+    force: {
+      type: "boolean",
+      description: "Overwrite existing mypi.yaml",
+      alias: "f",
+      default: false,
+    },
+  },
+  async run({ args }) {
+    await runInit(process.cwd(), args.force as boolean);
+  },
+});
+
+const configureCmd = defineCommand({
+  meta: {
+    name: "configure",
+    description:
+      "Launch an interactive wizard to manage profiles in mypi.yaml.",
+  },
+  async run() {
+    await runConfigure(process.cwd());
+  },
+});
 
 const main = defineCommand({
   meta: {
@@ -17,41 +47,46 @@ const main = defineCommand({
         "Profile name to use (defaults to the default profile in mypi.yaml)",
       alias: "p",
     },
-    force: {
-      type: "boolean",
-      description: "Overwrite existing mypi.yaml (only for init)",
-      alias: "f",
-      default: false,
-    },
   },
   async run({ args, rawArgs }) {
     const firstNonFlag = rawArgs.find((arg) => !arg.startsWith("-"));
 
-    switch (firstNonFlag) {
-      case "init":
-        await runInit(process.cwd(), args.force as boolean);
-        return;
+    // Route to subcommands manually (avoids citty's subcommand detection
+    // which treats the first non-flag arg as a subcommand name even when
+    // it's a value consumed by --profile)
+    if (firstNonFlag === "init") {
+      const force = rawArgs.includes("--force") || rawArgs.includes("-f");
+      await runInit(process.cwd(), force);
+      return;
+    }
 
-      case "configure":
-        await runConfigure(process.cwd());
-        return;
+    if (firstNonFlag === "configure") {
+      await runConfigure(process.cwd());
+      return;
     }
 
     // Default: launch pi with profile
-    // Collect passthrough args (everything after --profile <name>)
     const passthrough: string[] = [];
-    let skipping = false;
+    let skipNext = false;
 
     for (let i = 0; i < rawArgs.length; i++) {
       const arg = rawArgs[i];
+
+      if (skipNext) {
+        skipNext = false;
+        continue;
+      }
+
       if (arg === "--profile" || arg === "-p") {
-        skipping = true;
+        skipNext = true;
         continue;
       }
-      if (skipping) {
-        skipping = false;
+
+      // Handle --profile=value and -pvalue forms
+      if (arg.startsWith("--profile=") || arg.startsWith("-p")) {
         continue;
       }
+
       if (
         arg === "--help" ||
         arg === "-h" ||
@@ -60,6 +95,7 @@ const main = defineCommand({
       ) {
         continue;
       }
+
       passthrough.push(arg);
     }
 
@@ -71,4 +107,27 @@ const main = defineCommand({
   },
 });
 
-runMain(main);
+// Pre-process raw args to handle subcommand help before citty's runMain
+// intercepts --help (since we don't use citty's subCommands mechanism)
+const rawArgs = process.argv.slice(2);
+const firstNonFlag = rawArgs.find((arg) => !arg.startsWith("-"));
+
+if (
+  firstNonFlag === "init" &&
+  (rawArgs.includes("--help") || rawArgs.includes("-h"))
+) {
+  renderUsage(initCmd, main).then((usage) => {
+    console.log(usage);
+    process.exit(0);
+  });
+} else if (
+  firstNonFlag === "configure" &&
+  (rawArgs.includes("--help") || rawArgs.includes("-h"))
+) {
+  renderUsage(configureCmd, main).then((usage) => {
+    console.log(usage);
+    process.exit(0);
+  });
+} else {
+  runMain(main);
+}

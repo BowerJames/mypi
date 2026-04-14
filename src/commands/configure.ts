@@ -1,7 +1,7 @@
-import { confirm, input, select, checkbox } from "@inquirer/prompts";
-import { loadConfig, writeConfig, formatErrors } from "../config/loader.js";
-import { discoverAll } from "../resources/resolver.js";
+import { checkbox, confirm, input, select } from "@inquirer/prompts";
+import { formatErrors, loadConfig, writeConfig } from "../config/loader.js";
 import type { MypiConfig, Profile } from "../config/schema.js";
+import { discoverAll } from "../resources/resolver.js";
 
 async function mainMenu(): Promise<string> {
   return select({

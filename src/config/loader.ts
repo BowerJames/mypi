@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
-import type { ConfigValidationError, MypiConfig, Profile } from "./schema.js";
+import type { ConfigValidationError, MypiConfig } from "./schema.js";
 
 const DEFAULT_CONFIG = `default: assistant
 
