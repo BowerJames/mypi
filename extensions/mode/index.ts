@@ -109,7 +109,9 @@ export default function modeExtension(pi: ExtensionAPI): void {
       const name = args.trim();
 
       if (!name) {
-        await setMode(null, ctx);
+        if (activeMode) {
+          await setMode(null, ctx);
+        }
         return;
       }
 
@@ -168,11 +170,7 @@ export default function modeExtension(pi: ExtensionAPI): void {
     const entries = ctx.sessionManager.getEntries();
     for (let i = entries.length - 1; i >= 0; i--) {
       const entry = entries[i];
-      if (
-        entry.type === "custom" &&
-        "customType" in entry &&
-        entry.customType === "mode"
-      ) {
+      if (entry.type === "custom" && entry.customType === "mode") {
         const data = entry.data;
         if (data?.mode && typeof data.mode === "string" && data.mode in MODES) {
           activeMode = data.mode;
