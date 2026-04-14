@@ -11,6 +11,8 @@ mypi is a CLI tool that manages pi coding agent profiles, bundling extensions, s
 - All CLI commands must have a corresponding `--help` flag that describes usage, available options, and examples.
 - Use Biome for formatting and linting. Run `bun run format` and `bun run lint` before committing.
 - Prefer simple, readable code over clever abstractions.
+- No any types unless absolutely necessary.
+- Maintain type safety wherever possible.
 
 ## Running Tests
 
