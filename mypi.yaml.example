@@ -1,0 +1,15 @@
+default: assistant
+
+profiles:
+  assistant:
+    extensions:
+      - mode
+    skills:
+      - deployments
+    prompts:
+      - overview
+    cmd: "pi"
+  reviewer:
+    prompts:
+      - review
+    cmd: "pi -p"

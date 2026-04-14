@@ -3,4 +3,25 @@
   "version": "0.1.0",
   "description": "CLI tool that manages pi coding agent profiles, bundling extensions, skills, and prompt templates",
   "type": "module",
+  "bin": {
+    "mypi": "./dist/index.js"
+  },
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "build": "mkdir -p dist && { echo '#!/usr/bin/env bun'; bun build src/index.ts --target bun; } > dist/index.js && chmod +x dist/index.js",
+    "test": "bun test",
+    "lint": "biome lint src/ tests/",
+    "format": "biome check --fix src/ tests/",
+    "format:check": "biome check src/ tests/"
+  },
+  "dependencies": {
+    "@inquirer/prompts": "^7.4.1",
+    "citty": "^0.1.6",
+    "yaml": "^2.7.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/bun": "^1.2.8",
+    "typescript": "^5.8.2"
+  }
 }
