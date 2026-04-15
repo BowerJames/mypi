@@ -4,6 +4,52 @@ CLI tool that manages [pi](https://github.com/nicosql/pi) coding agent profiles,
 
 ## Installation
 
+### Globally from the project
+
+Clone the repo, install dependencies, build, and link globally:
+
+```bash
+git clone https://github.com/BowerJames/mypi.git
+cd mypi
+bun install
+bun run build
+bun install -g /absolute/path/to/mypi
+```
+
+> **Note:** Use the **absolute path** to the project directory rather than `.`.
+> Bun has a [known bug](https://github.com/oven-sh/bun/issues/12463) where `bun install -g .`
+> does not resolve the `bin` entry correctly.
+
+### Globally via symlink with `mypi-dev`
+
+For live development without rebuilding, symlink the `mypi-dev` wrapper script:
+
+```bash
+git clone https://github.com/BowerJames/mypi.git
+cd mypi
+bun install
+chmod +x bin/mypi-dev
+sudo ln -s "$(pwd)/bin/mypi-dev" /usr/local/bin/mypi-dev
+```
+
+This runs `src/index.ts` directly via bun — no build step needed. You can have both
+`mypi` (built version) and `mypi-dev` (live source) installed at the same time.
+
+### Directly from GitHub via bunx
+
+Run on-the-fly without cloning locally:
+
+```bash
+bunx github:BowerJames/mypi
+```
+
+This fetches and executes the latest version each time. Requires an internet
+connection on every invocation.
+
+### Local development setup
+
+If you just want to hack on the source without a global install:
+
 ```bash
 bun install
 ```
