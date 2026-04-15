@@ -4,7 +4,8 @@ mypi is a CLI tool that manages pi coding agent profiles, bundling extensions, s
 
 ## Additional Development CLI Tools
 
-- `gh` — GitHub CLI. Used for GitHub operations (creating PRs, viewing issues, etc.). Install via https://cli.github.com/.
+- `gh` - GitHub CLI. Used for GitHub operations (creating PRs, viewing issues, etc.).
+- `tmux` - tmux is a terminal multiplexer: it enables a number of terminals to be created, accessed, and controlled from a single screen. tmux may be detached from a screen and continue running in the background, then later reattached. 
 
 ## Development Guidelines
 
@@ -25,6 +26,15 @@ bun test
 ```bash
 bun run lint
 ```
+
+## Code Review
+To launch an independent code review run:
+
+```bash
+mypi --profile reviewer "/review <issue_number> <target_branch>"
+```
+
+Where <issue_number> is the number of the issue being reviewed and <target_branch> is the name of the branch the work has been done on.
 
 ## Running Code Formatting Checks
 
