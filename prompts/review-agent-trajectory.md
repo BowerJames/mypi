@@ -14,6 +14,6 @@ You are only performing a review and should not edit anything or attempt to impl
 
 You should respond with a prioritised list of issues, gaps and opportunities and the specific skills they relate to.
 
-Here is the transcript:
+Please read the transcript from the following file and perform the review:
 
 $1
