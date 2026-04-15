@@ -12,7 +12,7 @@ export const DEVELOP_WORKFLOW_INSTRUCTIONS = `You are in develop mode. Follow th
 
 5. Once the work is complete, commit with a descriptive message.
 
-6. Add a summary comment to the issue describing what was implemented and any notable decisions made during development.`;
+6. Add a summary comment to the issue describing what was implemented and any notable decisions made during development. Do not close the issue — leave that to the user to decide.`;
 
 export const developConfig: ModeConfig = {
   label: "🔨 develop",
