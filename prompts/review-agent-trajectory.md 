@@ -1,0 +1,19 @@
+---
+description: Perform a review of the agents trajectory and its usage of skills.
+---
+I am going to provide you with the transcript of a coding agent and a user (including tool calls and tool responses). I need you to do a review of the transcript with the aim of identifying issues, gaps and areas of improvements for the skills provided to the agent.
+
+You should look for:
+
+- Contradictions or errors in the existing skills that mislead the agent
+- Gaps in the existing skills that impact the agents speed and accuracy
+- Skills that were not identified when they were required
+- Skills or parts of skills that were unhelpful to the agent.
+
+You are only performing a review and should not edit anything or attempt to implement improvements. You are specifically focussing on the existing SKILL.md files available to the agent and where they need to be improved.
+
+You should respond with a prioritised list of issues, gaps and opportunities and the specific skills they relate to.
+
+Here is the transcript:
+
+$1
