@@ -36,6 +36,8 @@ mypi --profile reviewer "/review <issue_number> <target_branch>"
 
 Where <issue_number> is the number of the issue being reviewed and <target_branch> is the name of the branch the work has been done on.
 
+The code review can take a long time so provide a timeout of 1000 seconds.
+
 ## Running Code Formatting Checks
 
 ```bash
