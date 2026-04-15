@@ -4,20 +4,9 @@ import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import type { ConfigValidationError, MypiConfig } from "./schema.js";
 
 const DEFAULT_CONFIG = `default: assistant
-
 profiles:
   assistant:
-    extensions:
-      - mode
-    skills:
-      - deployments
-    prompts:
-      - overview
-    cmd: "pi"
-  reviewer:
-    prompts:
-      - review
-    cmd: "pi -p"
+    cmd: pi
 `;
 
 function validateProfile(
