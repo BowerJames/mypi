@@ -4,9 +4,14 @@ profiles:
     cmd: pi
     extensions:
       - mode
+      - review-agent-trajectory
     prompts:
       - overview
   reviewer:
     cmd: pi -p
     prompts:
       - review
+  review-agent-trajectory:
+    cmd: pi -p
+    prompts:
+      - review-agent-trajectory
