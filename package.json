@@ -1,0 +1,55 @@
+{
+	"name": "mypi",
+	"version": "0.1.0",
+	"description": "Curated library of pi extensions, skills, and prompts with profile-based launching",
+	"type": "module",
+	"bin": {
+		"mypi": "./dist/cli.js"
+	},
+	"main": "./dist/cli.js",
+	"files": [
+		"dist/",
+		"prompts/",
+		"extensions/",
+		"skills/"
+	],
+	"scripts": {
+		"build": "rm -rf dist && tsc -p tsconfig.build.json && chmod +x dist/cli.js",
+		"postinstall": "chmod +x dist/cli.js",
+		"prepack": "npm run build",
+		"dev": "tsc --watch",
+		"test": "vitest run",
+		"typecheck": "tsc -p tsconfig.check.json",
+		"lint": "biome check .",
+		"lint:fix": "biome check --write .",
+		"prepare": "husky",
+		"install:global": "d=$(mktemp -d) && npm pack --pack-destination $d >/dev/null 2>&1 && npm install -g $d/*.tgz && rm -rf $d",
+		"link:dev": "ln -sf $PWD/dist/cli.js $(npm prefix -g)/bin/mypi-dev",
+		"unlink:dev": "rm -f $(npm prefix -g)/bin/mypi-dev"
+	},
+	"dependencies": {
+		"js-yaml": "^4.1.0"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.5.0",
+		"@earendil-works/pi-coding-agent": "*",
+		"@earendil-works/pi-tui": "*",
+		"@types/js-yaml": "^4.0.9",
+		"@types/node": "^22.0.0",
+		"husky": "^9.1.0",
+		"lint-staged": "^17.0.0",
+		"typescript": "^5.8.0",
+		"vitest": "^4.1.4"
+	},
+	"keywords": [
+		"pi",
+		"pi-coding-agent",
+		"extensions",
+		"skills",
+		"prompts"
+	],
+	"lint-staged": {
+		"*.{js,jsx,mjs,cjs,ts,tsx,mts,cts,json,jsonc}": "biome check --write"
+	},
+	"license": "MIT"
+}

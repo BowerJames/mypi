@@ -1,0 +1,7 @@
+# Pre-commit hook: auto-fix + re-stage Biome files via lint-staged, then
+# whole-project typecheck.
+# Installed/updated via `npm install` (the `prepare` script runs `husky`).
+# Bypass for a single commit with: git commit --no-verify
+
+npx lint-staged
+npx tsc -p tsconfig.check.json

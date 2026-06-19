@@ -1,0 +1,23 @@
+# mypi-config.yaml
+# Place this file in the root of your project.
+# Run: mypi <profile> [args...]
+
+default: fullstack
+
+profiles:
+  fullstack:
+    extensions:
+      - mode                  # plan/develop mode system
+      - code-review           # appends pre-PR review guidance + /code-review-model
+      - dynamic-skills       # live shell execution inside skills (!`cmd`, ```! blocks)
+    prompts:
+      - overview              # repo overview and open issues
+      - code-review           # independent code review (args: issue_number branch_to_review target_branch_of_pr)
+    cmd: "pi --model claude-sonnet-4-20250514 --tools read,bash,edit,write,grep,find,ls"
+
+  reviewer:
+    extensions: []
+    prompts:
+      - overview
+      - code-review
+    cmd: "pi --model claude-sonnet-4-20250514 --tools read,grep,find,ls"
