@@ -1,0 +1,28 @@
+# Source (consumers get dist/ instead)
+src/
+
+# Dev / repo infrastructure
+node_modules/
+.git/
+.husky/
+.github/
+
+# Config not needed by consumers
+tsconfig.json
+tsconfig.build.json
+tsconfig.check.json
+biome.json
+AGENTS.md
+.gitignore
+.npmignore
+.DS_Store
+
+# Local configs (never publish)
+mypi-config.yaml
+mypi-config.example.yaml
+
+# NOTE on co-located tests: files inside a directory listed in package.json's
+# "files" field (dist/, extensions/, skills/, prompts/) CANNOT be excluded via
+# .npmignore or .gitignore — npm gives the "files" allowlist precedence. So
+# the *.test.ts and mocks.ts files under extensions/ ship by design. Excluding
+# them would require enumerating non-test files in "files" or relocating tests.

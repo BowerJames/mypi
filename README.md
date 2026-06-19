@@ -5,14 +5,22 @@ A curated library of [pi](https://shittycodingagent.ai) extensions, skills, and 
 ## Install
 
 ```bash
-npm install -g mypi
+npm install -g @bowerjames/mypi
 ```
 
-> **Note:** `mypi` is not published to the public npm registry, so the command above only works inside environments where it has been published (e.g. a private registry). Otherwise install it from a local checkout — see [Updating the global install](#updating-the-global-install).
+`mypi` shells out to `pi` (resolved from your `$PATH`). The package declares `@earendil-works/pi-coding-agent` — which provides the `pi` binary — as a peer dependency, so a fresh install also installs `pi` automatically. If you already have `pi` installed (any way), npm reuses it and your existing `pi` keeps running.
 
 ### Updating the global install
 
-Because `dist/` is gitignored and the package isn't on a registry, the global install is updated by **rebuilding from a local checkout, packing it into a tarball (which carries the built `dist/` via the `files` field), and reinstalling that tarball**. From your local checkout:
+```bash
+npm install -g @bowerjames/mypi@latest
+```
+
+Verify with `mypi -h` (prints help).
+
+### Dev: installing from a local checkout
+
+For unreleased branches, `dist/` is gitignored, so a local install is done by **rebuilding from a checkout, packing it into a tarball (which carries the built `dist/` via the `files` field), and reinstalling that tarball**:
 
 ```bash
 git checkout <branch>     # whichever branch you want installed (e.g. main)
@@ -25,8 +33,8 @@ npm run install:global    # builds dist/ (via prepack), packs a tarball, reinsta
 
 ```bash
 npm run build             # compile src/ -> dist/
-npm pack                  # bundle mypi-<version>.tgz (ships dist/ via the "files" field)
-npm install -g ./mypi-<version>.tgz
+npm pack                  # bundle bowerjames-mypi-<version>.tgz (ships dist/ via the "files" field)
+npm install -g ./bowerjames-mypi-<version>.tgz
 ```
 
 Notes:
@@ -41,12 +49,6 @@ Notes:
 
 ```bash
 mypi init
-```
-
-Or copy the example config:
-
-```bash
-cp node_modules/mypi/mypi-config.example.yaml mypi-config.yaml
 ```
 
 2. Edit `mypi-config.yaml` to define your profiles (or use `mypi configure` for an interactive editor).
