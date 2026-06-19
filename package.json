@@ -1,5 +1,5 @@
 {
-	"name": "mypi",
+	"name": "@bowerjames/mypi",
 	"version": "0.1.0",
 	"description": "Curated library of pi extensions, skills, and prompts with profile-based launching",
 	"type": "module",
@@ -13,6 +13,21 @@
 		"extensions/",
 		"skills/"
 	],
+	"publishConfig": {
+		"access": "public"
+	},
+	"engines": {
+		"node": ">=18"
+	},
+	"author": "James Bower <james.bower@xanda.net>",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/BowerJames/mypi.git"
+	},
+	"bugs": {
+		"url": "https://github.com/BowerJames/mypi/issues"
+	},
+	"homepage": "https://github.com/BowerJames/mypi#readme",
 	"scripts": {
 		"build": "rm -rf dist && tsc -p tsconfig.build.json && chmod +x dist/cli.js",
 		"postinstall": "chmod +x dist/cli.js",
@@ -23,12 +38,17 @@
 		"lint": "biome check .",
 		"lint:fix": "biome check --write .",
 		"prepare": "husky",
+		"prepublishOnly": "npm run typecheck && npm test && npm run lint",
 		"install:global": "d=$(mktemp -d) && npm pack --pack-destination $d >/dev/null 2>&1 && npm install -g $d/*.tgz && rm -rf $d",
 		"link:dev": "ln -sf $PWD/dist/cli.js $(npm prefix -g)/bin/mypi-dev",
 		"unlink:dev": "rm -f $(npm prefix -g)/bin/mypi-dev"
 	},
 	"dependencies": {
 		"js-yaml": "^4.1.0"
+	},
+	"peerDependencies": {
+		"@earendil-works/pi-coding-agent": "*",
+		"@earendil-works/pi-tui": "*"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.5.0",
