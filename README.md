@@ -161,7 +161,7 @@ Some resources are designed to work together. For example, the `review-agent-tra
 
 | Name | Description |
 |------|-------------|
-| `mode` | Plan/develop mode system — `/plan`, `/develop`, `/mode <name>` commands |
+| `mode` | Plan/develop mode system — `/plan`, `/develop`, `/mode <name>` commands. Root branch auto-defaults to the current git branch on first start and persists (sticky across resume); set/clear via `/root-branch` (clear is sticky and suppresses re-defaulting) |
 | `code-review` | Appends a "run an independent review before a PR" system-prompt section and provides `/code-review-model` to set the recommended review model (defaults to the active session model) |
 | `review-agent-trajectory` | Session trajectory review command — captures the current conversation and launches a review pass |
 | `dynamic-skills` | Live shell execution inside skills — inline `!\`cmd\`` and fenced ```!``` blocks are replaced with their output at skill load (covers `/skill:name` and `read` of `SKILL.md`) |

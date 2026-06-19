@@ -12,8 +12,13 @@
  *   /develop            — toggle develop mode
  *   /develop <number>   — activate develop mode for an existing issue
  *   /develop new <desc> — activate develop mode, agent will create issue first
- *   /root-branch        — clear root branch
+ *   /root-branch        — clear root branch (sticky: suppresses auto-default across resume)
  *   /root-branch <name> — set root branch
+ *
+ * On the first start of a session with no root-branch entry, the root branch
+ * auto-defaults to the current git branch and is persisted (so it sticks
+ * across resume). An explicit clear is sticky and stops the auto-default
+ * from re-applying. See root-branch.ts for the tri-state model.
  *
  * Adding a new mode: create a config file and add an entry to the MODES registry below.
  */
@@ -23,8 +28,10 @@ import { DEVELOP_WORKFLOW_INSTRUCTIONS, developConfig } from "./develop.js";
 import { PLAN_WORKFLOW_INSTRUCTIONS, planConfig } from "./plan.js";
 import {
 	buildRootBranchPromptSuffix,
-	getRootBranch,
+	planRootBranchStartup,
 	ROOT_BRANCH_CUSTOM_TYPE,
+	readRootBranchState,
+	shouldWriteRootBranch,
 } from "./root-branch.js";
 import type { ModeConfig } from "./types.js";
 
@@ -88,6 +95,45 @@ async function buildDevelopActivationContent(
 	}
 
 	return `${DEVELOP_WORKFLOW_INSTRUCTIONS}${repoLine}${issueContext}`;
+}
+
+/**
+ * Resolve the current git branch for auto-defaulting the root branch.
+ *
+ * Returns the trimmed branch name, or `undefined` on any non-success path
+ * (non-zero exit, detached HEAD reported as the literal "HEAD", or a thrown
+ * exec). Silent fallback — never surfaces an error to the user.
+ */
+async function getCurrentBranch(pi: ExtensionAPI, cwd: string): Promise<string | undefined> {
+	try {
+		const { stdout, code } = await pi.exec("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+			cwd,
+			timeout: 5000,
+		});
+		if (code !== 0) return undefined;
+		const branch = stdout.trim();
+		if (!branch || branch === "HEAD") return undefined; // detached HEAD
+		return branch;
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * Restore (or auto-default) the root branch at session start.
+ *
+ * Reads the persisted tri-state; only consults git when there is no
+ * root-branch entry yet. Applies `planRootBranchStartup` and persists the
+ * auto-default once. Returns the effective root branch (string | null).
+ */
+async function restoreRootBranch(pi: ExtensionAPI, ctx: ExtensionContext): Promise<string | null> {
+	const state = readRootBranchState(ctx.sessionManager);
+	const currentBranch = state.status === "unset" ? await getCurrentBranch(pi, ctx.cwd) : undefined;
+	const { rootBranch, shouldWrite } = planRootBranchStartup(state, currentBranch);
+	if (shouldWrite && rootBranch) {
+		pi.appendEntry(ROOT_BRANCH_CUSTOM_TYPE, { branch: rootBranch });
+	}
+	return rootBranch;
 }
 
 export default function modeExtension(pi: ExtensionAPI): void {
@@ -257,11 +303,15 @@ export default function modeExtension(pi: ExtensionAPI): void {
 
 			if (branch) {
 				rootBranch = branch;
-				pi.appendEntry(ROOT_BRANCH_CUSTOM_TYPE, { branch });
+				if (shouldWriteRootBranch(ctx.sessionManager, branch)) {
+					pi.appendEntry(ROOT_BRANCH_CUSTOM_TYPE, { branch });
+				}
 				ctx.ui.notify(`Root branch set to: ${branch}`, "info");
 			} else {
 				rootBranch = null;
-				pi.appendEntry(ROOT_BRANCH_CUSTOM_TYPE, { branch: null });
+				if (shouldWriteRootBranch(ctx.sessionManager, null)) {
+					pi.appendEntry(ROOT_BRANCH_CUSTOM_TYPE, { branch: null });
+				}
 				ctx.ui.notify("Root branch cleared", "info");
 			}
 
@@ -310,7 +360,7 @@ export default function modeExtension(pi: ExtensionAPI): void {
 			}
 		}
 
-		rootBranch = getRootBranch(ctx.sessionManager) ?? null;
+		rootBranch = await restoreRootBranch(pi, ctx);
 
 		updateStatus(ctx);
 	});
