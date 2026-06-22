@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { composeStatus, formatError, formatResult, formatStarted, previewArgs } from "./format.js";
+import {
+	composeStatus,
+	formatError,
+	formatResult,
+	formatStarted,
+	previewArgs,
+	wrapBtwPrompt,
+} from "./format.js";
 
 describe("previewArgs", () => {
 	it("collapses internal whitespace", () => {
@@ -132,5 +139,54 @@ describe("formatError", () => {
 
 	it("omits the preview clause for an empty preview", () => {
 		expect(formatError("boom", "")).toBe("btw: failed — boom");
+	});
+});
+
+describe("wrapBtwPrompt", () => {
+	it("wraps the args inside the <btw-task> markers", () => {
+		const result = wrapBtwPrompt("find the failing test");
+		expect(result.startsWith("<btw-task>")).toBe(true);
+		expect(result.trim().endsWith("</btw-task>")).toBe(true);
+	});
+
+	it("contains the key scoping directives", () => {
+		const result = wrapBtwPrompt("do a thing");
+		expect(result).toContain("side-task clone");
+		expect(result).toContain("context only");
+		expect(result.toLowerCase()).toContain("do not continue the main agent's work");
+		expect(result).toContain("then stop");
+		expect(result).toContain("Side task:");
+	});
+
+	it("injects the args verbatim after the 'Side task:' label", () => {
+		const args = "find the test that's failing";
+		const result = wrapBtwPrompt(args);
+		expect(result).toContain(`Side task:\n${args}`);
+	});
+
+	it("preserves multi-line args", () => {
+		const args = "line one\nline two\nline three";
+		const result = wrapBtwPrompt(args);
+		expect(result).toContain(args);
+	});
+
+	it("trims surrounding whitespace from the injected args", () => {
+		const result = wrapBtwPrompt("   hello world   \n\n");
+		expect(result).toContain("Side task:\nhello world");
+		expect(result).not.toContain("hello world   ");
+	});
+
+	it("produces a well-formed wrapper for an empty task", () => {
+		const result = wrapBtwPrompt("");
+		expect(result.startsWith("<btw-task>")).toBe(true);
+		expect(result.trim().endsWith("</btw-task>")).toBe(true);
+		expect(result).toContain("Side task:\n");
+	});
+
+	it("does not interpret $-sequences in the task text as replacement patterns", () => {
+		// `$&`/`$1` would be mangled if injected via String.replace; template
+		// substitution passes them through verbatim.
+		const result = wrapBtwPrompt("echo $& and $1 into the shell");
+		expect(result).toContain("echo $& and $1 into the shell");
 	});
 });

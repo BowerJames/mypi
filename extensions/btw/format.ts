@@ -15,6 +15,33 @@ const PREVIEW_MAX = 60;
 /** Truncation marker appended when a result exceeds the caps. */
 const TRUNCATION_MARKER = "… (truncated)";
 
+/**
+ * Guardrail wrapped around the `/btw` task text before it is sent to the
+ * clone's `session.prompt(...)`.
+ *
+ * The clone inherits the parent's full conversation and effective system prompt
+ * (which encodes the in-progress task, AGENTS.md, mode, skills, …). Without
+ * framing, the clone can reasonably decide to "help finish" the main agent's
+ * work rather than just answering the side task. This directive is the last
+ * thing in the clone's context (appended after the seeded conversation), so it
+ * dominates steering and scopes the clone to exactly the side task.
+ */
+
+/** Preamble (before the injected task text) of the btw-task guardrail. */
+const BTW_TASK_GUARDRAIL_PREFIX = `<btw-task>
+You are a throwaway side-task clone of the main agent. The conversation above is provided for context only.
+
+- Do NOT continue the main agent's work or pick up where it left off.
+- Complete ONLY the side task below, then stop. Do not start any follow-up work.
+- Only modify files or run state-changing commands (git, installs, writes, etc.) if the side task explicitly requires it; otherwise stay read-only.
+- Keep the work tightly scoped to the side task.
+
+Side task:
+`;
+
+/** Suffix (after the injected task text) of the btw-task guardrail. */
+const BTW_TASK_GUARDRAIL_SUFFIX = "\n</btw-task>";
+
 type BtwTaskStatus = "running" | "done" | "error";
 
 /**
@@ -70,6 +97,24 @@ export function formatStarted(preview: string): string {
  */
 export function formatError(message: string, preview?: string): string {
 	return preview ? `btw: failed (${preview}) — ${message}` : `btw: failed — ${message}`;
+}
+
+/**
+ * Wrap the `/btw` task text in a `<btw-task>` guardrail before sending it to
+ * the clone, so the clone treats the parent conversation as context-only,
+ * completes only the side task, and stops — rather than continuing the main
+ * agent's work.
+ *
+ * Wrapping is model-facing only: the TUI preview / status / error paths keep
+ * using the raw (cleaned) task text via `previewArgs`. Trims the injected args
+ * defensively (the handler already trims, but the function is self-contained).
+ *
+ * The task text is inserted via a template substitution rather than a string
+ * `replace`, so `$`-sequences in the task text are passed through verbatim
+ * (never interpreted as replacement patterns).
+ */
+export function wrapBtwPrompt(args: string): string {
+	return `${BTW_TASK_GUARDRAIL_PREFIX}${args.trim()}${BTW_TASK_GUARDRAIL_SUFFIX}`;
 }
 
 /**

@@ -16,6 +16,7 @@ import {
 	SessionManager,
 	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
+import { wrapBtwPrompt } from "./format.js";
 import type { BtwInputs, BtwTask } from "./types.js";
 
 /** Built-in pi tools the clone may use (parent's custom/extension tools excluded). */
@@ -161,7 +162,10 @@ export interface BtwRunResult {
  *
  * - Creates an in-memory clone reproducing the parent's prompt/model/tools.
  * - Seeds it with the full parent conversation.
- * - `await session.prompt(args)` resolves when the clone goes idle.
+ * - `await session.prompt(wrapBtwPrompt(args))` resolves when the clone goes
+ *   idle. The task text is wrapped in a `<btw-task>` guardrail so the clone
+ *   scopes itself to the side task rather than continuing the main agent's
+ *   work.
  * - Extracts the final assistant text.
  * - Always disposes the clone session in `finally`.
  *
@@ -187,7 +191,7 @@ export async function runBtwClone(inputs: BtwInputs, task: BtwTask): Promise<Btw
 	seedCloneSession(session.sessionManager, inputs.messages);
 
 	try {
-		await session.prompt(inputs.args);
+		await session.prompt(wrapBtwPrompt(inputs.args));
 		const text = getFinalAssistantText(session.sessionManager.buildSessionContext().messages);
 		return { ok: true, text };
 	} finally {
