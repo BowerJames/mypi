@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { composeStatus, formatResult, previewArgs } from "./format.js";
+import { composeStatus, formatError, formatResult, formatStarted, previewArgs } from "./format.js";
 
 describe("previewArgs", () => {
 	it("collapses internal whitespace", () => {
@@ -85,5 +85,52 @@ describe("formatResult", () => {
 	it("leaves short multi-line output intact", () => {
 		const text = "first\nsecond";
 		expect(formatResult(text)).toBe("btw › first\nsecond");
+	});
+
+	describe("with preview", () => {
+		it("shows the preview on the first line followed by the answer", () => {
+			expect(formatResult("created issue #8", "create an issue")).toBe(
+				"btw › create an issue\ncreated issue #8",
+			);
+		});
+
+		it("uses the (no output) body when text is empty", () => {
+			expect(formatResult("", "some task")).toBe("btw › some task\n(no output)");
+		});
+
+		it("ignores an empty preview", () => {
+			expect(formatResult("done", "")).toBe("btw › done");
+		});
+
+		it("truncates long output with a marker even with a preview", () => {
+			const long = "y".repeat(5000);
+			const result = formatResult(long, "preview task");
+			expect(result.startsWith("btw › preview task\n")).toBe(true);
+			expect(result.endsWith("… (truncated)")).toBe(true);
+		});
+	});
+});
+
+describe("formatStarted", () => {
+	it("formats a started notification with the preview", () => {
+		expect(formatStarted("create an issue")).toBe("btw › started: create an issue");
+	});
+
+	it("includes the prefix even for an empty preview", () => {
+		expect(formatStarted("")).toBe("btw › started: ");
+	});
+});
+
+describe("formatError", () => {
+	it("formats an error with the preview when provided", () => {
+		expect(formatError("boom", "create an issue")).toBe("btw: failed (create an issue) — boom");
+	});
+
+	it("formats an error without a preview", () => {
+		expect(formatError("boom")).toBe("btw: failed — boom");
+	});
+
+	it("omits the preview clause for an empty preview", () => {
+		expect(formatError("boom", "")).toBe("btw: failed — boom");
 	});
 });

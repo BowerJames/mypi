@@ -19,7 +19,7 @@ import { randomUUID } from "node:crypto";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { buildSessionContext } from "@earendil-works/pi-coding-agent";
 import { type BtwRunResult, runBtwClone } from "./clone.js";
-import { composeStatus, formatResult, previewArgs } from "./format.js";
+import { composeStatus, formatError, formatResult, formatStarted, previewArgs } from "./format.js";
 import { BTW_STATUS_KEY, type BtwInputs, type BtwTask } from "./types.js";
 
 export default function btwExtension(pi: ExtensionAPI): void {
@@ -75,6 +75,7 @@ export default function btwExtension(pi: ExtensionAPI): void {
 			};
 			tasks.set(task.id, task);
 			refreshStatus(ctx);
+			ctx.ui.notify(formatStarted(task.preview), "info");
 
 			// Fire and forget — never block the main agent stream.
 			void runBtw(inputs, task, ctx);
@@ -97,14 +98,15 @@ export default function btwExtension(pi: ExtensionAPI): void {
 		try {
 			result = await runBtwClone(inputs, task);
 		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
 			if (!task.aborted) {
 				task.status = "error";
-				task.message = err instanceof Error ? err.message : String(err);
+				task.message = message;
 			}
 			tasks.delete(task.id);
 			refreshStatus(ctx);
 			if (!task.aborted) {
-				ctx.ui.notify(`btw: failed — ${task.message}`, "error");
+				ctx.ui.notify(formatError(message, task.preview), "error");
 			}
 			return;
 		}
@@ -116,7 +118,7 @@ export default function btwExtension(pi: ExtensionAPI): void {
 		tasks.delete(task.id);
 		refreshStatus(ctx);
 		if (!task.aborted) {
-			ctx.ui.notify(formatResult(result.text), result.ok ? "info" : "error");
+			ctx.ui.notify(formatResult(result.text, task.preview), result.ok ? "info" : "error");
 		}
 	}
 
