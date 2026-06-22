@@ -5,12 +5,12 @@ profiles:
     extensions:
       - mode
       - code-review
-      - review-agent-trajectory
       - dynamic-skills
-    prompts:
-      - overview
+      - btw
     skills:
       - repo-explorer
+    prompts:
+      - overview
   reviewer:
     cmd: pi -p
     extensions: []
