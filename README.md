@@ -166,6 +166,7 @@ Some resources are designed to work together. For example, the `review-agent-tra
 | `mode` | Plan/develop mode system — `/plan`, `/develop`, `/mode <name>` commands. Root branch auto-defaults to the current git branch on first start and persists (sticky across resume); set/clear via `/root-branch` (clear is sticky and suppresses re-defaulting) |
 | `code-review` | Appends a "run an independent review before a PR" system-prompt section and provides `/code-review-model` to set the recommended review model (defaults to the active session model) |
 | `review-agent-trajectory` | Session trajectory review command — captures the current conversation and launches a review pass |
+| `btw` | Non-blocking one-off side tasks on a throwaway in-memory clone — `/btw <task>` runs in parallel without interrupting the main stream, and its result is shown in the TUI but kept out of the main agent's context |
 | `dynamic-skills` | Live shell execution inside skills — inline `!\`cmd\`` and fenced ```!``` blocks are replaced with their output at skill load (covers `/skill:name` and `read` of `SKILL.md`) |
 
 ### Skills
@@ -228,6 +229,30 @@ The `code-review` extension moves the pre-PR review guidance out of shared `AGEN
 - Shows a `🔍 review:` status indicator in the footer: the explicitly-configured model in the accent color, and the active-fallback model in a warning color (prefixed `(active)`).
 
 Because the review subprocess is launched via `mypi run` (which loads no extensions and no profiles), the reviewer agent does not re-append this section — only the interactive session that enables `code-review` sees the guidance.
+
+### btw
+
+The `btw` extension registers a single `/btw <task>` command for non-blocking side tasks. When invoked it builds a **throwaway in-memory clone** of the current agent — same context, effective system prompt, model, and built-in tools — runs the task to completion, shows the final assistant message in the TUI, then drops the clone. The intent is to dispatch single tasks that share the main agent's context but run in parallel without interrupting its stream, e.g. while a code-review agent is describing a non-blocking issue:
+
+```
+/btw create an issue for that
+```
+
+This creates the issue in the background while the main agent continues toward blocking fixes or the PR.
+
+**How it works:**
+
+- The `/btw` command handler snapshots the parent's conversation (`buildSessionContext`), effective system prompt (`getSystemPrompt`), model, model registry, thinking level, and active tools, then returns immediately — the clone runs in the background and never blocks the main agent.
+- The clone is built with `createAgentSession` using `SessionManager.inMemory()`, so nothing is persisted. Its system prompt is the parent's effective prompt verbatim (which already encodes contributions from `mode`, `code-review`, `AGENTS.md`, and skills), and it is seeded with the full parent conversation (compaction/branch summaries are converted to user messages so prior context survives).
+- When the clone goes idle, the final assistant text is shown via `ctx.ui.notify(...)` — which writes directly to the chat scrollback but **never touches the session manager**, so the result is visible yet **kept out of the main agent's LLM context**. While running, a `⚙ btw: N running` indicator is shown in the footer.
+- Multiple `/btw` tasks may run in parallel (no cap). Every live clone is aborted and disposed automatically when the main session shuts down (`/new`, `/resume`, `/reload`, `/fork`, `/switchSession`, or quit).
+
+**v1 limitations (accepted):**
+
+- The clone reproduces the parent's **built-in tools only** (`read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`), intersected with the parent's active set. Extension-registered custom tools, event handlers, and slash commands are not re-instantiated inside the clone. The built-in `bash` tool covers the primary use case (e.g. `gh issue create`).
+- Result display uses `notify`'s info path, which coalesces consecutive status lines: if two btw tasks complete with no other chat activity between them, only the latest result line is shown. The common case (btw running *during* the main stream, where the main agent's messages land between completions) is unaffected.
+
+Enable it by adding `btw` to a profile's `extensions` list.
 
 ## Development
 
