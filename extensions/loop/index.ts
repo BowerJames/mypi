@@ -8,7 +8,9 @@
  *
  * Per iteration:
  *   1. Send each `--loop` item in order via `pi.sendUserMessage(item)`,
- *      awaiting `ctx.waitForIdle()` between items so they flow sequentially.
+ *      waiting for the turn to start (`before_agent_start` event) and
+ *      then waiting for the agent to go idle between items so they flow
+ *      sequentially.
  *   2. Read the iteration's final assistant text.
  *   3. If `--terminal-regex` matches it, stop (success).
  *   4. Else if not the last iteration, navigate the session tree back to the
@@ -23,7 +25,7 @@
  * and terminal notifications are surfaced via `ctx.ui.notify`.
  */
 
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { buildSessionContext } from "@earendil-works/pi-coding-agent";
 import {
 	composeStatus,
@@ -38,6 +40,35 @@ import {
 import { parseLoopArgs } from "./parse.js";
 import { LOOP_STATUS_KEY } from "./types.js";
 
+/**
+ * Send a user message and wait for the turn to start and complete.
+ *
+ * `pi.sendUserMessage` is fire-and-forget (detached promise) and
+ * `ctx.waitForIdle()` can resolve spuriously before the turn has begun
+ * (the turn start is async, deep inside `prompt()`). To close the race,
+ * we wait for the `before_agent_start` event (which fires just before
+ * `activeRun` is set) before calling `waitForIdle`.
+ *
+ * Each iteration creates a new Promise and writes its resolver into
+ * `resolveTurnStart`. The `before_agent_start` handler calls the resolver
+ * when the event fires. After each call, `resolveTurnStart[0]` holds a
+ * stale (already-resolved) resolver — calling it is a no-op, so the
+ * handler does nothing between iterations.
+ */
+async function sendAndWaitForTurn(
+	ctx: ExtensionCommandContext,
+	pi: ExtensionAPI,
+	item: string,
+	resolveTurnStart: [(() => void) | undefined],
+): Promise<void> {
+	const start = new Promise<void>((resolve) => {
+		resolveTurnStart[0] = resolve;
+	});
+	pi.sendUserMessage(item);
+	await start;
+	await ctx.waitForIdle();
+}
+
 /** Collapse a loop item to a short one-line preview for notifications. */
 function previewItem(item: string, max = 60): string {
 	const single = item.replace(/\s+/g, " ").trim();
@@ -45,6 +76,17 @@ function previewItem(item: string, max = 60): string {
 }
 
 export default function loopExtension(pi: ExtensionAPI): void {
+	// Mutable resolver reference for the before_agent_start handler.
+	// Registered once at extension level (not inside the command handler)
+	// so it never accumulates across /loop invocations.
+	// After each iteration, it holds a stale (already-resolved) resolver;
+	// calling it is a no-op, so the handler is harmless between invocations.
+	const resolveTurnStart: [(() => void) | undefined] = [undefined];
+
+	pi.on("before_agent_start", () => {
+		resolveTurnStart[0]?.();
+	});
+
 	pi.registerCommand("loop", {
 		description:
 			"Repeat messages until a terminal condition (resets to the original point each iteration)",
@@ -78,11 +120,11 @@ export default function loopExtension(pi: ExtensionAPI): void {
 					ctx.ui.setStatus(LOOP_STATUS_KEY, composeStatus(iter, maxIter));
 					ctx.ui.notify(formatIteration(iter, maxIter, previewItem(loop[0])), "info");
 
-					// Send each loop item in order, waiting for the agent to settle so
-					// later items see earlier items' output within the iteration.
+					// Send each loop item in order, waiting for the turn to start
+					// and then waiting for the agent to settle so later items
+					// see earlier items' output within the iteration.
 					for (const item of loop) {
-						pi.sendUserMessage(item);
-						await ctx.waitForIdle();
+						await sendAndWaitForTurn(ctx, pi, item, resolveTurnStart);
 					}
 
 					// Evaluate the terminal condition against this iteration's final
