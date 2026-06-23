@@ -41,8 +41,9 @@ export function composeStatus(iter: number, max: number): string {
 
 /** Format the "loop started" chat notification. */
 export function formatStarted(max: number, hasRegex: boolean): string {
-	const term = hasRegex ? " until the terminal regex matches or" : "";
-	return `loop › started (max ${max} iteration${max === 1 ? "" : "s"}${term})`;
+	const base = `max ${max} iteration${max === 1 ? "" : "s"}`;
+	const term = hasRegex ? "; stops when the terminal regex matches or max is reached" : "";
+	return `loop › started (${base}${term})`;
 }
 
 /** Format the per-iteration "running" chat notification. */

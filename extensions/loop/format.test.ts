@@ -108,7 +108,7 @@ describe("composeStatus", () => {
 describe("formatStarted", () => {
 	it("mentions the terminal regex clause when one is present", () => {
 		expect(formatStarted(10, true)).toBe(
-			"loop › started (max 10 iterations until the terminal regex matches or)",
+			"loop › started (max 10 iterations; stops when the terminal regex matches or max is reached)",
 		);
 	});
 
