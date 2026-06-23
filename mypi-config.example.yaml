@@ -10,6 +10,7 @@ profiles:
       - mode                  # plan/develop mode system
       - code-review           # appends pre-PR review guidance + /code-review-model
       - dynamic-skills       # live shell execution inside skills (!`cmd`, ```! blocks)
+      - loop                  # repeat messages until a terminal condition (/loop --loop ["..."] ...)
     prompts:
       - overview              # repo overview and open issues
       - code-review           # independent code review (args: issue_number branch_to_review target_branch_of_pr)

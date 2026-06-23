@@ -167,6 +167,7 @@ Some resources are designed to work together. For example, the `review-agent-tra
 | `code-review` | Appends a "run an independent review before a PR" system-prompt section and provides `/code-review-model` to set the recommended review model (defaults to the active session model) |
 | `review-agent-trajectory` | Session trajectory review command — captures the current conversation and launches a review pass |
 | `btw` | Non-blocking one-off side tasks on a throwaway in-memory clone — `/btw <task>` runs in parallel without interrupting the main stream, and its result is shown in the TUI but kept out of the main agent's context. Each task is wrapped in a guardrail so the clone scopes itself to the side task and does not continue the main agent's work |
+| `loop` | Repeat messages until a terminal condition — `/loop [--terminal-regex <re>] [--max-iter <n>] --loop ["msg",...]` resets the session to the original point between iterations via tree navigation so each pass is a clean slate |
 | `dynamic-skills` | Live shell execution inside skills — inline `!\`cmd\`` and fenced ```!``` blocks are replaced with their output at skill load (covers `/skill:name` and `read` of `SKILL.md`) |
 
 ### Skills
@@ -254,6 +255,46 @@ This creates the issue in the background while the main agent continues toward b
 - Result display uses `notify`'s info path, which coalesces consecutive status lines: if two btw tasks complete with no other chat activity between them, only the latest result line is shown. The common case (btw running *during* the main stream, where the main agent's messages land between completions) is unaffected.
 
 Enable it by adding `btw` to a profile's `extensions` list.
+
+### loop
+
+The `loop` extension registers a single `/loop` command that repeats a sequence of messages to the agent until a terminal condition is met, resetting the session back to the original point between iterations so each pass is a clean slate (not a continuous flow within one conversation).
+
+```
+/loop [--terminal-regex <source>] [--max-iter <n>] --loop ["msg", ...]
+```
+
+| Flag | Required | Default | Description |
+|------|----------|---------|-------------|
+| `--loop` | Yes | — | JSON array of strings sent to the agent in order each iteration |
+| `--max-iter` | No | `10` | Maximum number of iterations (hard cap; guarantees termination) |
+| `--terminal-regex` | No | — | Regex **source** matched against the final assistant text of each iteration; a match stops the loop early |
+
+There is **no goal argument** — the command is flags-only.
+
+Example:
+
+```
+/loop --terminal-regex "<\/end>" --max-iter 10 --loop ["/plan","/evaluate-plan"]
+```
+
+**How it works:**
+
+- Each iteration sends every `--loop` item in order via `sendUserMessage`, awaiting the agent going idle between items so they flow sequentially (e.g. `/evaluate-plan` sees `/plan`'s output).
+- The iteration's final assistant text is read; if `--terminal-regex` matches, the loop stops. Otherwise the loop resets to the anchor and runs again.
+- The **reset** is a same-session tree navigation back to the entry that was the leaf when the command was invoked (`navigateTree` with branch summary disabled). Because this stays in one session file, each iteration becomes a sibling branch off that anchor and the conversation is restored to the original point — a clean slate — without starting a new session.
+- A `🔄 loop: N/M` indicator is shown in the footer while running, and start / per-iteration / terminal notifications are surfaced in the chat.
+
+The loop always terminates: `--max-iter` is a hard cap (default 10), and `--terminal-regex` provides an early exit.
+
+**Argument parsing:** tokens are whitespace-separated; a token beginning with `"` or `'` is read literally (delimiters stripped, so backslashes/`$`/`&` survive — wrap `--terminal-regex` in quotes if it contains spaces). Bare tokens are bracket-aware, so a JSON array can be typed verbatim even with internal spaces and quoted strings (`--loop ["/plan", "/evaluate-plan"]`). Unknown tokens (e.g. an accidental trailing goal) are an error.
+
+**Accepted limitations:**
+
+- The reset is **conversation-level**: in-memory state of other extensions (e.g. a toggled `/plan`) is not reset, since the loop stays in one session.
+- The terminal regex matches the **final assistant text** of the iteration, so the last `--loop` item should be one that produces an assistant response for the regex to be meaningful.
+
+Enable it by adding `loop` to a profile's `extensions` list.
 
 ## Development
 
