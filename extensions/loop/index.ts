@@ -8,8 +8,8 @@
  *
  * Per iteration:
  *   1. Send each `--loop` item in order via `pi.sendUserMessage(item)`,
- *      waiting for the turn to start (`before_agent_start` event) and
- *      then waiting for the agent to go idle between items so they flow
+ *      waiting for the turn to start (`agent_start` event) and then
+ *      waiting for the agent to go idle between items so they flow
  *      sequentially.
  *   2. Read the iteration's final assistant text.
  *   3. If `--terminal-regex` matches it, stop (success).
@@ -43,17 +43,32 @@ import { LOOP_STATUS_KEY } from "./types.js";
 /**
  * Send a user message and wait for the turn to start and complete.
  *
- * `pi.sendUserMessage` is fire-and-forget (detached promise) and
- * `ctx.waitForIdle()` can resolve spuriously before the turn has begun
- * (the turn start is async, deep inside `prompt()`). To close the race,
- * we wait for the `before_agent_start` event (which fires just before
- * `activeRun` is set) before calling `waitForIdle`.
+ * `pi.sendUserMessage` is fire-and-forget (detached promise, returns void).
+ * We need to synchronise on two milestones before sending the next item:
  *
- * Each iteration creates a new Promise and writes its resolver into
- * `resolveTurnStart`. The `before_agent_start` handler calls the resolver
- * when the event fires. After each call, `resolveTurnStart[0]` holds a
- * stale (already-resolved) resolver — calling it is a no-op, so the
- * handler does nothing between iterations.
+ *   1. The turn has actually started — so that `waitForIdle()` (which
+ *      returns `activeRun?.promise ?? Promise.resolve()`) returns a real
+ *      promise instead of resolving instantly.
+ *   2. The turn has completed — via `waitForIdle()`.
+ *
+ * For (1) we listen for `agent_start`, NOT `before_agent_start`.
+ * `before_agent_start` fires inside `emitBeforeAgentStart()`, which is
+ * `await`ed by `prompt()`. Resolving our promise there schedules a
+ * microtask that runs BEFORE `prompt()` continues to `_runAgentPrompt` →
+ * `runWithLifecycle` (which is where `activeRun` is set). At that point
+ * `waitForIdle()` sees no `activeRun` and returns `Promise.resolve()` —
+ * resolving spuriously and letting the next `sendUserMessage` collide
+ * with the still-pending turn ("Agent is already processing").
+ *
+ * `agent_start`, by contrast, fires inside `runWithLifecycle`'s executor —
+ * AFTER `activeRun` and `isStreaming` are set — so when we resume and call
+ * `waitForIdle()`, a real `activeRun.promise` is returned.
+ *
+ * Each call creates a new Promise and writes its resolver into
+ * `resolveTurnStart`. The `agent_start` handler calls the resolver when
+ * the event fires. After each call, `resolveTurnStart[0]` holds a stale
+ * (already-resolved) resolver — calling it is a no-op, so the handler
+ * does nothing between items or across /loop invocations.
  */
 async function sendAndWaitForTurn(
 	ctx: ExtensionCommandContext,
@@ -76,14 +91,14 @@ function previewItem(item: string, max = 60): string {
 }
 
 export default function loopExtension(pi: ExtensionAPI): void {
-	// Mutable resolver reference for the before_agent_start handler.
+	// Mutable resolver reference for the agent_start handler.
 	// Registered once at extension level (not inside the command handler)
 	// so it never accumulates across /loop invocations.
-	// After each iteration, it holds a stale (already-resolved) resolver;
-	// calling it is a no-op, so the handler is harmless between invocations.
+	// After each item, it holds a stale (already-resolved) resolver;
+	// calling it is a no-op, so the handler is harmless between items.
 	const resolveTurnStart: [(() => void) | undefined] = [undefined];
 
-	pi.on("before_agent_start", () => {
+	pi.on("agent_start", () => {
 		resolveTurnStart[0]?.();
 	});
 
