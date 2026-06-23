@@ -7,9 +7,6 @@
 
 import type { SessionContext } from "@earendil-works/pi-coding-agent";
 
-/** Footer status key re-exported so format tests stay decoupled from types.ts. */
-export const LOOP_STATUS_KEY = "loop";
-
 /**
  * Extract the text of the final assistant message that actually has text.
  *

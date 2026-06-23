@@ -8,9 +8,9 @@ import {
 	formatStarted,
 	formatTerminalMatch,
 	getFinalAssistantText,
-	LOOP_STATUS_KEY,
 	usageString,
 } from "./format.js";
+import { LOOP_STATUS_KEY } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Test helpers (message-shape mirrors of extensions/btw/clone.test.ts)
