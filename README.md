@@ -167,7 +167,7 @@ Some resources are designed to work together. For example, the `review-agent-tra
 | `code-review` | Appends a "run an independent review before a PR" system-prompt section and provides `/code-review-model` to set the recommended review model (defaults to the active session model) |
 | `review-agent-trajectory` | Session trajectory review command — captures the current conversation and launches a review pass |
 | `btw` | Non-blocking one-off side tasks on a throwaway in-memory clone — `/btw <task>` runs in parallel without interrupting the main stream, and its result is shown in the TUI but kept out of the main agent's context. Each task is wrapped in a guardrail so the clone scopes itself to the side task and does not continue the main agent's work |
-| `loop` | Repeat messages until a terminal condition — `/loop [--terminal-regex <re>] [--max-iter <n>] --loop ["msg",...]` resets the session to the original point between iterations via tree navigation so each pass is a clean slate |
+| `loop` | Repeat messages until a terminal condition — `/loop [--terminal-regex <re>] [--max-iter <n>] --loop ["msg",...]` resets the session to the original point after every item (and between iterations) via tree navigation, so each item runs from a clean slate and the session ends back at the anchor |
 | `dynamic-skills` | Live shell execution inside skills — inline `!\`cmd\`` and fenced ```!``` blocks are replaced with their output at skill load (covers `/skill:name` and `read` of `SKILL.md`) |
 
 ### Skills
@@ -258,7 +258,7 @@ Enable it by adding `btw` to a profile's `extensions` list.
 
 ### loop
 
-The `loop` extension registers a single `/loop` command that repeats a sequence of messages to the agent until a terminal condition is met, resetting the session back to the original point between iterations so each pass is a clean slate (not a continuous flow within one conversation).
+The `loop` extension registers a single `/loop` command that repeats a sequence of messages to the agent until a terminal condition is met. Within each pass (an iteration over the `--loop` array), **every item runs independently** — the session is reset back to the original point after each item, so item N does not see item N−1's output (not a continuous flow within one conversation). The session is left back at the anchor when the loop exits.
 
 ```
 /loop [--terminal-regex <source>] [--max-iter <n>] --loop ["msg", ...]
@@ -266,7 +266,7 @@ The `loop` extension registers a single `/loop` command that repeats a sequence 
 
 | Flag | Required | Default | Description |
 |------|----------|---------|-------------|
-| `--loop` | Yes | — | JSON array of strings sent to the agent in order each iteration |
+| `--loop` | Yes | — | JSON array of strings sent to the agent in order each iteration, each from a clean anchor |
 | `--max-iter` | No | `10` | Maximum number of iterations (hard cap; guarantees termination) |
 | `--terminal-regex` | No | — | Regex **source** matched against the final assistant text of each iteration; a match stops the loop early |
 
@@ -280,9 +280,10 @@ Example:
 
 **How it works:**
 
-- Each iteration sends every `--loop` item in order via `sendUserMessage`, awaiting the agent going idle between items so they flow sequentially (e.g. `/evaluate-plan` sees `/plan`'s output).
-- The iteration's final assistant text is read; if `--terminal-regex` matches, the loop stops. Otherwise the loop resets to the anchor and runs again.
-- The **reset** is a same-session tree navigation back to the entry that was the leaf when the command was invoked (`navigateTree` with branch summary disabled). Because this stays in one session file, each iteration becomes a sibling branch off that anchor and the conversation is restored to the original point — a clean slate — without starting a new session.
+- Each iteration sends every `--loop` item in order via `sendUserMessage`, awaiting the agent going idle between items. After EACH item the session is reset back to the anchor, so items run independently — item N does **not** see item N−1's output (e.g. `/evaluate-plan` does not see `/plan`'s output).
+- The iteration's final (last) item's assistant text is read; if `--terminal-regex` matches, the loop stops. Otherwise the loop runs again, starting from the anchor.
+- The **reset** is a same-session tree navigation back to the entry that was the leaf when the command was invoked (`navigateTree` with branch summary disabled). Because this stays in one session file, each item/iteration becomes a sibling branch off that anchor and the conversation is restored to the original point — a clean slate — without starting a new session.
+- The last item's reset serves double duty as the between-iteration reset, so the session always ends back at the anchor when the loop exits (terminal match or max-iter reached). The sole exception is an explicit user cancellation of the tree navigation.
 - A `🔄 loop: N/M` indicator is shown in the footer while running, and start / per-iteration / terminal notifications are surfaced in the chat.
 
 The loop always terminates: `--max-iter` is a hard cap (default 10), and `--terminal-regex` provides an early exit.

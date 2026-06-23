@@ -3,18 +3,25 @@
  *
  * Registers `/loop [...flags]`: repeats a sequence of messages to the agent
  * until a terminal condition is met, resetting the conversation back to the
- * point where the command was invoked between iterations so each pass is a
- * clean slate (not a continuous flow within a single session).
+ * point where the command was invoked after EVERY item so each item runs from
+ * a clean slate (items within an iteration are independent — item N does NOT
+ * see item N-1's output).
  *
- * Per iteration:
+ * Per iteration (a "pass" over the --loop array):
  *   1. Send each `--loop` item in order via `pi.sendUserMessage(item)`,
  *      waiting for the turn to start (`agent_start` event) and then
- *      waiting for the agent to go idle between items so they flow
- *      sequentially.
- *   2. Read the iteration's final assistant text.
+ *      waiting for the agent to go idle. After EACH item the session is
+ *      reset back to the anchor, so items are independent rather than a
+ *      sequential build-up.
+ *   2. Read the LAST item's final assistant text (captured before its reset).
  *   3. If `--terminal-regex` matches it, stop (success).
- *   4. Else if not the last iteration, navigate the session tree back to the
- *      anchor (captured at command start) so the next iteration starts clean.
+ *   4. The last item's reset also serves as the between-iteration reset, so
+ *      the next iteration starts from the anchor.
+ *
+ * The session always ends at the anchor on every non-cancelled exit path
+ * (terminal match, max-iter reached): the last item's reset has already run
+ * when the loop returns. The sole exception is an explicit user cancellation
+ * of the tree navigation, where the reset cannot proceed.
  *
  * Reset uses `ctx.navigateTree(anchorId, { summarize: false })` rather than
  * `ctx.fork(...)`: it stays in one session file, does not emit
@@ -84,6 +91,23 @@ async function sendAndWaitForTurn(
 	await ctx.waitForIdle();
 }
 
+/**
+ * Navigate the session tree back to the anchor for a clean slate.
+ *
+ * `summarize:false` suppresses the branch-summary prompt, so each item /
+ * iteration becomes a sibling branch off the anchor. Returns `false` when the
+ * user cancelled the navigation, signalling the caller to abort the loop.
+ */
+async function resetToAnchor(ctx: ExtensionCommandContext, anchorId: string): Promise<boolean> {
+	const result = await ctx.navigateTree(anchorId, { summarize: false });
+	if (result.cancelled) {
+		ctx.ui.notify(formatCancelled(), "warning");
+		return false;
+	}
+	await ctx.waitForIdle();
+	return true;
+}
+
 /** Collapse a loop item to a short one-line preview for notifications. */
 function previewItem(item: string, max = 60): string {
 	const single = item.replace(/\s+/g, " ").trim();
@@ -104,7 +128,7 @@ export default function loopExtension(pi: ExtensionAPI): void {
 
 	pi.registerCommand("loop", {
 		description:
-			"Repeat messages until a terminal condition (resets to the original point each iteration)",
+			"Repeat messages until a terminal condition (resets to the original point after every item; the session ends back at the anchor)",
 		handler: async (args, ctx) => {
 			if (!ctx.hasUI) return;
 
@@ -135,40 +159,37 @@ export default function loopExtension(pi: ExtensionAPI): void {
 					ctx.ui.setStatus(LOOP_STATUS_KEY, composeStatus(iter, maxIter));
 					ctx.ui.notify(formatIteration(iter, maxIter, previewItem(loop[0])), "info");
 
-					// Send each loop item in order, waiting for the turn to start
-					// and then waiting for the agent to settle so later items
-					// see earlier items' output within the iteration.
-					for (const item of loop) {
-						await sendAndWaitForTurn(ctx, pi, item, resolveTurnStart);
+					// Every item runs from a clean anchor: reset after EACH item
+					// (including the last), so items are independent — item N does
+					// NOT see item N-1's output. The last item's reset also serves
+					// as the between-iteration reset and guarantees the session
+					// ends at the anchor on every non-cancelled exit path.
+					let finalText = "";
+					for (let idx = 0; idx < loop.length; idx++) {
+						await sendAndWaitForTurn(ctx, pi, loop[idx], resolveTurnStart);
+
+						// Capture the last item's response BEFORE resetting it away.
+						if (idx === loop.length - 1) {
+							finalText = getFinalAssistantText(
+								buildSessionContext(ctx.sessionManager.getEntries(), ctx.sessionManager.getLeafId())
+									.messages,
+							);
+						}
+
+						if (!(await resetToAnchor(ctx, anchorId))) return; // cancelled
 					}
 
-					// Evaluate the terminal condition against this iteration's final
-					// assistant text. The standalone buildSessionContext accepts the
-					// read-only session view + leaf id (no cast needed).
-					const finalText = getFinalAssistantText(
-						buildSessionContext(ctx.sessionManager.getEntries(), ctx.sessionManager.getLeafId())
-							.messages,
-					);
-
+					// Terminal condition: checked once per iteration against the
+					// LAST item's response. The session is already back at the
+					// anchor (last item's reset above), so we just return.
 					if (terminalRegex?.test(finalText)) {
 						ctx.ui.notify(formatTerminalMatch(iter), "info");
 						return;
 					}
-
-					// Reset to the anchor for a clean slate next iteration, unless this
-					// was the last one. summarize:false suppresses the branch-summary
-					// prompt; each iteration becomes a sibling branch off the anchor.
-					if (iter < maxIter) {
-						const result = await ctx.navigateTree(anchorId, { summarize: false });
-						if (result.cancelled) {
-							ctx.ui.notify(formatCancelled(), "warning");
-							return;
-						}
-						await ctx.waitForIdle();
-					}
 				}
 
 				ctx.ui.notify(formatMaxIter(maxIter), "info");
+				// Session already at anchor (last item's reset ran above).
 			} finally {
 				ctx.ui.setStatus(LOOP_STATUS_KEY, undefined);
 			}
