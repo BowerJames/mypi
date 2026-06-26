@@ -5,9 +5,15 @@
  * testable.
  */
 
-/** Max lines / characters of a btw result shown in the chat notification. */
-const MAX_RESULT_LINES = 25;
-const MAX_RESULT_CHARS = 2000;
+/**
+ * Max characters of a btw result body shown in the chat notification (~50 KB).
+ *
+ * A generous safety net so a runaway clone cannot flood the chat scrollback
+ * — the full text is always persisted to a temp file regardless (see the
+ * `filePath` pointer in `formatResult`). The line cap was removed: realistic
+ * answers are not line-bounded.
+ */
+const MAX_RESULT_CHARS = 50_000;
 
 /** Max length of the args preview shown in status/notifications. */
 const PREVIEW_MAX = 60;
@@ -66,17 +72,27 @@ export function composeStatus(tasks: { status: BtwTaskStatus }[]): string | unde
 /**
  * Format a clone's final assistant text for display as a chat notification.
  *
- * When a `preview` (the task's args, already collapsed/capped by `previewArgs`)
- * is supplied, it is shown on the first line so parallel results can be told
- * apart; the answer follows on subsequent lines. Collapses to `(no output)`
- * when empty, and caps length so a verbose answer does not flood the chat
- * scrollback.
+ * Layout (top to bottom):
+ *   1. `btw › <preview>` — the task-args label (when supplied), so parallel
+ *      results can be told apart.
+ *   2. `↳ <filePath>` — pointer to the full, untruncated result on disk (when
+ *      supplied). This line is NEVER subject to the body cap, so the full
+ *      answer is always recoverable even if the scrollback rolls or the body
+ *      hits the ~50 KB safety net.
+ *   3. The body — `text` trimmed, or `(no output)` when empty. Capped at
+ *      `MAX_RESULT_CHARS` so a verbose answer cannot flood the chat.
+ *
+ * Only the body is capped; the header and pointer lines are always shown in
+ * full.
  */
-export function formatResult(text: string, preview?: string): string {
+export function formatResult(text: string, preview?: string, filePath?: string): string {
 	const trimmed = text.trim();
-	const body = trimmed || "(no output)";
-	if (preview) return capResult(`btw › ${preview}\n${body}`);
-	return capResult(`btw › ${body}`);
+	const body = capResult(trimmed || "(no output)");
+	const lines: string[] = [];
+	if (preview) lines.push(`btw › ${preview}`);
+	if (filePath) lines.push(`↳ ${filePath}`);
+	const header = lines.join("\n");
+	return header ? `${header}\n${body}` : `btw › ${body}`;
 }
 
 /**
@@ -118,24 +134,9 @@ export function wrapBtwPrompt(args: string): string {
 }
 
 /**
- * Enforce the line/character caps, appending a truncation marker if cut.
+ * Enforce the character cap (~50 KB), appending a truncation marker if cut.
  */
 function capResult(text: string): string {
-	let truncated = false;
-
-	const lines = text.split("\n");
-	let joined: string;
-	if (lines.length > MAX_RESULT_LINES) {
-		joined = lines.slice(0, MAX_RESULT_LINES).join("\n");
-		truncated = true;
-	} else {
-		joined = text;
-	}
-
-	if (joined.length > MAX_RESULT_CHARS) {
-		joined = joined.slice(0, MAX_RESULT_CHARS);
-		truncated = true;
-	}
-
-	return truncated ? `${joined}\n${TRUNCATION_MARKER}` : joined;
+	if (text.length <= MAX_RESULT_CHARS) return text;
+	return `${text.slice(0, MAX_RESULT_CHARS)}\n${TRUNCATION_MARKER}`;
 }
