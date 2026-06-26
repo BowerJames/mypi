@@ -4,7 +4,9 @@
  * Registers `/btw <args>`: spawns a throwaway, non-blocking in-memory clone of
  * the current agent — same context, effective system prompt, model, and
  * built-in tools — runs the task to idle, then shows the final assistant text
- * in the TUI and drops the clone.
+ * in the TUI and drops the clone. The full text is also persisted to
+ * `/tmp/btw-<uuid>.md` (with a pointer line shown in the chat) so the answer
+ * is always recoverable.
  *
  * Display uses `ctx.ui.notify(...)` (which writes directly to the chat
  * scrollback and never touches the session manager), so the result is visible
@@ -16,6 +18,7 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { writeFile } from "node:fs/promises";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { buildSessionContext } from "@earendil-works/pi-coding-agent";
 import { type BtwRunResult, runBtwClone } from "./clone.js";
@@ -118,7 +121,27 @@ export default function btwExtension(pi: ExtensionAPI): void {
 		tasks.delete(task.id);
 		refreshStatus(ctx);
 		if (!task.aborted) {
-			ctx.ui.notify(formatResult(result.text, task.preview), result.ok ? "info" : "error");
+			const filePath = result.ok ? await persistResult(result.text) : undefined;
+			ctx.ui.notify(
+				formatResult(result.text, task.preview, filePath),
+				result.ok ? "info" : "error",
+			);
+		}
+	}
+
+	/**
+	 * Persist a successful clone's full final text to a temp file so the
+	 * complete answer is always recoverable, even if the in-chat body hits the
+	 * ~50 KB safety cap or the scrollback rolls off-screen. Best-effort: a
+	 * write failure returns `undefined`, which simply omits the pointer line.
+	 */
+	async function persistResult(text: string): Promise<string | undefined> {
+		const filePath = `/tmp/btw-${randomUUID()}.md`;
+		try {
+			await writeFile(filePath, text, "utf8");
+			return filePath;
+		} catch {
+			return undefined;
 		}
 	}
 

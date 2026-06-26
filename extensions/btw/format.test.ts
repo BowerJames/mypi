@@ -75,15 +75,15 @@ describe("formatResult", () => {
 		expect(formatResult("  done  ")).toBe("btw › done");
 	});
 
-	it("truncates long output with a marker (line cap)", () => {
+	it("does not truncate moderately long output (no line cap)", () => {
 		const manyLines = Array.from({ length: 100 }, (_, i) => `line ${i}`).join("\n");
 		const result = formatResult(manyLines);
-		expect(result.endsWith("… (truncated)")).toBe(true);
-		expect(result.split("\n").length).toBeLessThan(100);
+		expect(result.endsWith("… (truncated)")).toBe(false);
+		expect(result.split("\n").length).toBe(100);
 	});
 
-	it("truncates long output with a marker (char cap)", () => {
-		const long = "y".repeat(5000);
+	it("truncates long output with a marker (char cap ~50 KB)", () => {
+		const long = "y".repeat(60_000);
 		const result = formatResult(long);
 		expect(result.endsWith("… (truncated)")).toBe(true);
 		expect(result.length).toBeLessThan(long.length);
@@ -110,10 +110,35 @@ describe("formatResult", () => {
 		});
 
 		it("truncates long output with a marker even with a preview", () => {
-			const long = "y".repeat(5000);
+			const long = "y".repeat(60_000);
 			const result = formatResult(long, "preview task");
 			expect(result.startsWith("btw › preview task\n")).toBe(true);
 			expect(result.endsWith("… (truncated)")).toBe(true);
+		});
+	});
+
+	describe("with filePath", () => {
+		it("shows the pointer line before the body", () => {
+			expect(formatResult("created issue #8", "create an issue", "/tmp/btw-x.md")).toBe(
+				"btw › create an issue\n↳ /tmp/btw-x.md\ncreated issue #8",
+			);
+		});
+
+		it("works without a preview", () => {
+			expect(formatResult("done", undefined, "/tmp/btw-y.md")).toBe("↳ /tmp/btw-y.md\ndone");
+		});
+
+		it("preserves the pointer line when the body is truncated", () => {
+			const long = "y".repeat(60_000);
+			const result = formatResult(long, "preview task", "/tmp/btw-z.md");
+			const lines = result.split("\n");
+			expect(lines[0]).toBe("btw › preview task");
+			expect(lines[1]).toBe("↳ /tmp/btw-z.md");
+			expect(result.endsWith("… (truncated)")).toBe(true);
+		});
+
+		it("omits the pointer line when filePath is undefined", () => {
+			expect(formatResult("done", "preview task")).toBe("btw › preview task\ndone");
 		});
 	});
 });
