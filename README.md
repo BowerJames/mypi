@@ -169,6 +169,7 @@ Some resources are designed to work together. For example, the `review-agent-tra
 | `btw` | Non-blocking one-off side tasks on a throwaway in-memory clone — `/btw <task>` runs in parallel without interrupting the main stream, and its result is shown in the TUI but kept out of the main agent's context. Each task is wrapped in a guardrail so the clone scopes itself to the side task and does not continue the main agent's work |
 | `loop` | Repeat messages until a terminal condition — `/loop [--terminal-regex <re>] [--max-iter <n>] --loop ["msg",...]` resets the session to the original point after every item (and between iterations) via tree navigation, so each item runs from a clean slate and the session ends back at the anchor |
 | `dynamic-skills` | Live shell execution inside skills — inline `!\`cmd\`` and fenced ```!``` blocks are replaced with their output at skill load (covers `/skill:name` and `read` of `SKILL.md`) |
+| `render-raw` | Append a raw (unformatted) rendering of the last assistant reply — `/render-raw` injects a custom-typed copy of the reply rendered as plain text (literal markdown), shown in the TUI but kept out of the main agent's context. Additive, not a toggle; a re-run against the same reply is a no-op |
 
 ### Skills
 
@@ -297,6 +298,24 @@ The loop always terminates: `--max-iter` is a hard cap (default 10), and `--term
 - The terminal regex matches the **final assistant text** of the iteration, so the last `--loop` item should be one that produces an assistant response for the regex to be meaningful.
 
 Enable it by adding `loop` to a profile's `extensions` list.
+
+### render-raw
+
+The `render-raw` extension registers a single `/render-raw` command that appends a **raw, unformatted** rendering of the last assistant reply to the chat. The model's markdown is shown literally — `**bold**` keeps its asterisks, headings keep their leading `#`, code fences keep their backticks, etc.
+
+It exists because pi renders every assistant text block through its built-in `Markdown` component and exposes no extension hook to toggle a "raw" mode or swap the assistant message renderer. The only way to control how a message renders is a renderer keyed by message `customType`, which only applies to custom-typed messages — so `render-raw` injects a **copy** of the reply under a custom type and renders that copy with a plain `Text` component.
+
+**How it works:**
+
+- `/render-raw` finds the last `role === "assistant"` message via `ctx.sessionManager.getEntries()` and sends a custom message (`customType: "render-raw"`, `display: true`) whose content is that reply's text, via `pi.sendMessage(...)`.
+- A registered `render-raw` message renderer returns a plain `Text` (with a small dim `raw markdown` label) instead of `Markdown`, so the markdown syntax is shown verbatim.
+- The injected custom message is **excluded from the LLM context** via a `context` event filter — a `CustomMessageEntry` participates in context by default, so this filter is required to avoid duplicating the reply into the conversation.
+
+**Additive, not a toggle.** The original nicely-formatted assistant message stays in place; `/render-raw` appends a raw copy below it. It cannot replace or hide the original (there is no `SessionManager.removeEntry`).
+
+**Dedupe.** `SessionManager` exposes no entry removal, so a naive toggle would stack duplicate raw copies. Instead, `/render-raw` only appends a new copy when the last assistant reply's text differs from the one already rendered (tracked in memory and reconstructed from the session on `/reload`, `/resume`, `/new`). Re-running `/render-raw` for the same reply notifies "last reply is already rendered raw" instead of duplicating; after a new reply it renders again.
+
+Enable it by adding `render-raw` to a profile's `extensions` list.
 
 ## Development
 
