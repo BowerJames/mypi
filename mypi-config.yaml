@@ -8,6 +8,7 @@ profiles:
       - dynamic-skills
       - btw
       - loop
+      - render-raw
     skills:
       - repo-explorer
     prompts:
