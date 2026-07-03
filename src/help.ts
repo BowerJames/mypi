@@ -23,13 +23,16 @@ USAGE
   mypi configure [options]
 
 COMMANDS
-  run           Run pi with bundled resource name resolution
+  run           Run pi with bundle expansion
   init          Create a default mypi-config.yaml
   configure     Interactive config editor
 
 OPTIONS
   --profile <name>   Use the named profile (default from config)
   -h, --help         Show help
+
+Profiles reference bundles by name rather than configuring individual
+extensions/skills/prompts. Run 'mypi configure' to edit bundles.
 
 Run 'mypi <command> --help' for more information on a command.
 `;
@@ -55,7 +58,7 @@ USAGE
 
 Opens an interactive editor for mypi-config.yaml. Allows setting the
 default profile, adding/removing/editing profiles, and selecting
-bundled extensions, skills, and prompt templates.
+bundles (each a packaged unit of pi-extensions, skills, and prompts).
 
 Requires an existing mypi-config.yaml. Run 'mypi init' to create one.
 
@@ -64,27 +67,26 @@ OPTIONS
 `;
 
 const RUN_HELP = `\
-mypi run - Run pi with bundled resource name resolution
+mypi run - Run pi with bundle expansion
 
 USAGE
-  mypi run [pi options...] [messages...]
+  mypi run [pi options...] [--bundle <name>]... [messages...]
 
-Forwards every argument to pi. For the resource flags -e/--extension,
---skill, and --prompt-template, a bare value that matches a name in mypi's
-bundled library is replaced with that resource's on-disk path:
+Forwards every argument to pi. mypi's --bundle <name> flag is expanded to
+that bundle's pi resource flags (-e/--skill/--prompt-template):
 
-  mypi run -p --model zai/glm-5.2 -e mode
-  -> pi -p --model zai/glm-5.2 -e <mypi>/extensions/mode/index.ts
+  mypi run -p --bundle code-review-prompt
+  -> pi -p --prompt-template <mypi>/extension-bundles/code-review-prompt/prompts/code-review.md
 
-Resolution rules:
-  - Bare names matching a bundled extension, skill, or prompt are resolved.
-  - Path-like values (containing a slash or backslash) are passed through.
-  - Unknown names are passed through (pi reports the error).
-  - The equals form (e.g. -e=mode, --extension=mode) is passed through,
-    matching pi's own parser which does not recognise it for these flags.
+Multiple --bundle flags are allowed; each expands independently.
+--bundle=<name> (equals form) is also recognised.
+
+Everything else is forwarded verbatim — including path-like -e ./local.ts,
+other pi flags, and positional messages.
 
 No mypi-config.yaml is required. mypi run uses no profiles and interprets no
-mypi-specific flags; everything after 'run' is forwarded to pi.
+mypi-specific flags other than --bundle; everything after 'run' is forwarded
+to pi.
 
 OPTIONS
   -h, --help         Show help

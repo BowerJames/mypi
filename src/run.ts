@@ -1,93 +1,93 @@
 /**
- * `mypi run` — pi passthrough with bundled resource name resolution.
+ * `mypi run` — pi passthrough with bundle expansion.
  *
- * Forwards every argument to `pi` verbatim, with one transformation: for the
- * resource flags `-e`/`--extension`, `--skill`, `--prompt-template`, if the
- * following value is a *bare name* (no path separator) of a bundled resource,
- * it is replaced with that resource's on-disk path. Everything else passes
- * through untouched.
+ * Forwards every argument to `pi` verbatim, with one transformation: a mypi
+ * `--bundle <name>` (or `--bundle=<name>`) flag is expanded to that bundle's
+ * pi resource flags (`-e`/`--skill`/`--prompt-template`), in pi-extensions →
+ * skills → prompts order. Everything else passes through untouched —
+ * including path-like `-e ./local.ts`, other pi flags, and positional
+ * messages — so power-user passthrough still works.
  *
- * Flag handling mirrors pi's own parser (cli/args.js): these flags are only
- * recognised in the space-separated exact-token form, and are repeatable. The
- * `=` form (e.g. `-e=mode`, `--extension=mode`) is NOT recognised by pi for
- * these flags and is passed through untouched here to match.
+ * Multiple `--bundle` flags are allowed; each expands independently.
  *
  * `mypi run` requires no config file and uses no profiles.
  */
 
-import { resolveExtension, resolvePrompt, resolveSkill } from "./resources.js";
+import { expandBundle } from "./resources.js";
 import { shellQuote, spawnShell } from "./shell.js";
 
-/** The flag tokens pi treats as resource loaders (exact match, space form). */
-const EXTENSION_FLAGS = new Set(["-e", "--extension"]);
-const SKILL_FLAGS = new Set(["--skill"]);
-const PROMPT_FLAGS = new Set(["--prompt-template"]);
+/** The pi flags emitted for each bundle facet, in order. */
+const PI_EXTENSION_FLAG = "-e";
+const PI_SKILL_FLAG = "--skill";
+const PI_PROMPT_FLAG = "--prompt-template";
 
 /**
- * Map a resource flag token to its resolver, or `undefined` if it is not a
- * resource flag.
- */
-function resolverForFlag(flag: string): ((name: string) => string) | undefined {
-	if (EXTENSION_FLAGS.has(flag)) return resolveExtension;
-	if (SKILL_FLAGS.has(flag)) return resolveSkill;
-	if (PROMPT_FLAGS.has(flag)) return resolvePrompt;
-	return undefined;
-}
-
-/**
- * Resolve a single resource value, applying the name-vs-path gate.
+ * Transform an argv array, expanding `--bundle <name>` into pi flags. Pure
+ * (no side effects) aside from the awaited bundle loads, safe to unit test.
  *
- * - Values containing a path separator (`/` or `\`) are path-like and pass
- *   through untouched (no resolution attempted).
- * - Bare names are resolved against the bundled library; a miss falls back to
- *   the original value (silent passthrough so pi reports the missing file).
- */
-function maybeResolveResource(value: string, resolve: (name: string) => string): string {
-	if (value.includes("/") || value.includes("\\")) return value;
-	try {
-		return resolve(value);
-	} catch {
-		return value;
-	}
-}
-
-/**
- * Transform an argv array, resolving bundled resource names for the resource
- * flags. Pure function — no side effects, safe to unit test.
+ * Walks left-to-right. When a token is exactly a bundle flag AND a following
+ * token exists, the bundle is resolved and its facets are emitted as pi
+ * flags. All other tokens (including unknown bare flags, `@files`, and
+ * positional messages) are copied verbatim.
  *
- * Walks left-to-right. When a token is exactly a resource flag AND a following
- * token exists, the flag is emitted and the following value is passed through
- * `maybeResolveResource`. All other tokens (including `=`-forms, unknown bare
- * flags, `@files`, and positional messages) are copied verbatim.
+ * `--bundle=` (equals form) is also recognised and handled the same way.
  */
-export function resolveResourceArgs(args: string[]): string[] {
+export async function resolveRunArgs(args: string[]): Promise<string[]> {
 	const out: string[] = [];
 
 	for (let i = 0; i < args.length; i++) {
-		const flag = args[i];
-		const resolve = resolverForFlag(flag);
+		const token = args[i];
+		const bundleName = bundleNameFor(token, args[i + 1]);
 
-		if (resolve !== undefined && i + 1 < args.length) {
-			const value = args[i + 1];
-			out.push(flag);
-			out.push(maybeResolveResource(value, resolve));
-			i++; // consume the value
+		if (bundleName !== undefined) {
+			const resolved = await expandBundle(bundleName);
+
+			for (const path of resolved.piExtensions) {
+				out.push(PI_EXTENSION_FLAG, path);
+			}
+			for (const path of resolved.skills) {
+				out.push(PI_SKILL_FLAG, path);
+			}
+			for (const path of resolved.prompts) {
+				out.push(PI_PROMPT_FLAG, path);
+			}
+
+			// Consume the value token too when we used the space-separated form.
+			if (token === "--bundle") i++;
 			continue;
 		}
 
-		out.push(flag);
+		out.push(token);
 	}
 
 	return out;
 }
 
 /**
- * Resolve bundled resource names in `args`, then run `pi` with the resulting
- * argv via `sh -c` (inheriting stdio/env), consistent with the profile
- * launcher.
+ * If `token` is a bundle flag (or the next token follows a `--bundle`), return
+ * the bundle name to expand. Returns `undefined` for any non-bundle token.
  */
-export function runPiPassthrough(args: string[]): void {
-	const resolved = resolveResourceArgs(args);
+function bundleNameFor(token: string, next: string | undefined): string | undefined {
+	if (token === "--bundle") {
+		// Need a following value; bare `--bundle` at the tail is left as-is.
+		if (next === undefined) return undefined;
+		return next;
+	}
+
+	if (token.startsWith("--bundle=")) {
+		const value = token.slice("--bundle=".length);
+		return value.length > 0 ? value : undefined;
+	}
+
+	return undefined;
+}
+
+/**
+ * Resolve `--bundle` flags in `args`, then run `pi` with the resulting argv
+ * via `sh -c` (inheriting stdio/env), consistent with the profile launcher.
+ */
+export async function runPiPassthrough(args: string[]): Promise<void> {
+	const resolved = await resolveRunArgs(args);
 	const commandStr = ["pi", ...resolved].map(shellQuote).join(" ");
 	spawnShell(commandStr);
 }

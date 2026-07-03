@@ -125,7 +125,7 @@ describe("buildCodeReviewPromptSuffix", () => {
 
 	it("references the code-review prompt template and invocation", () => {
 		const result = buildCodeReviewPromptSuffix("claude-sonnet-4-20250514");
-		expect(result).toContain("--prompt-template code-review");
+		expect(result).toContain("--bundle code-review-prompt");
 		expect(result).toContain(
 			"/code-review <issue_number> <branch_to_review> <target_branch_of_pr>",
 		);
