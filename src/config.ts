@@ -53,25 +53,11 @@ export function validateConfig(raw: unknown): Config {
 
 		const profile: Profile = { cmd: value.cmd as string };
 
-		if ("extensions" in value) {
-			if (!isStringArray(value.extensions)) {
-				throw new ConfigError(`Profile "${name}": "extensions" must be an array of strings.`);
+		if ("bundles" in value) {
+			if (!isStringArray(value.bundles)) {
+				throw new ConfigError(`Profile "${name}": "bundles" must be an array of strings.`);
 			}
-			profile.extensions = value.extensions;
-		}
-
-		if ("skills" in value) {
-			if (!isStringArray(value.skills)) {
-				throw new ConfigError(`Profile "${name}": "skills" must be an array of strings.`);
-			}
-			profile.skills = value.skills;
-		}
-
-		if ("prompts" in value) {
-			if (!isStringArray(value.prompts)) {
-				throw new ConfigError(`Profile "${name}": "prompts" must be an array of strings.`);
-			}
-			profile.prompts = value.prompts;
+			profile.bundles = value.bundles;
 		}
 
 		validatedProfiles[name] = profile;

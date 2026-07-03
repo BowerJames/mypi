@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { ConfigError, loadConfig } from "./config.js";
 import { configureConfig } from "./configure.js";
 import {
@@ -10,7 +12,7 @@ import {
 	printRunHelp,
 } from "./help.js";
 import { writeDefaultConfig } from "./init.js";
-import { resolveExtension, resolvePrompt, resolveSkill } from "./resources.js";
+import { expandBundle } from "./resources.js";
 import { runPiPassthrough } from "./run.js";
 import { shellQuote, spawnShell } from "./shell.js";
 import type { Config, Profile } from "./types.js";
@@ -34,30 +36,33 @@ function initConfig(cwd: string): void {
 // Build & spawn command
 // ---------------------------------------------------------------------------
 
-function buildCommand(profile: Profile, userArgs: string[]): string[] {
+/**
+ * Build the pi argv parts (resource flags) for a profile's bundles.
+ *
+ * Each bundle is expanded to its on-disk resource paths and emitted as
+ * `-e`/`--skill`/`--prompt-template` flags, in a stable order
+ * (pi-extensions → skills → prompts). Bundles are expanded in config order.
+ */
+async function buildResourceParts(profile: Profile): Promise<string[]> {
 	const parts: string[] = [];
 
-	// Resource flags
-	for (const name of profile.extensions ?? []) {
-		const path = resolveExtension(name);
-		parts.push("-e", path);
+	for (const name of profile.bundles ?? []) {
+		const resolved = await expandBundle(name);
+
+		for (const path of resolved.piExtensions) {
+			parts.push("-e", path);
+		}
+
+		for (const path of resolved.skills) {
+			parts.push("--skill", path);
+		}
+
+		for (const path of resolved.prompts) {
+			parts.push("--prompt-template", path);
+		}
 	}
 
-	for (const name of profile.skills ?? []) {
-		const path = resolveSkill(name);
-		parts.push("--skill", path);
-	}
-
-	for (const name of profile.prompts ?? []) {
-		const path = resolvePrompt(name);
-		parts.push("--prompt-template", path);
-	}
-
-	// Combine: user's cmd + resource flags + user args
-	// We shell-exec the whole thing so the user's cmd string is interpreted naturally.
-	const allArgs = [...parts, ...userArgs].map(shellQuote);
-
-	return [profile.cmd, ...allArgs];
+	return parts;
 }
 
 // ---------------------------------------------------------------------------
@@ -149,7 +154,7 @@ async function main(): Promise<void> {
 	}
 
 	if (args[0] === "run") {
-		runPiPassthrough(args.slice(1));
+		await runPiPassthrough(args.slice(1));
 		return;
 	}
 
@@ -195,7 +200,11 @@ async function main(): Promise<void> {
 
 	let fullCommand: string[];
 	try {
-		fullCommand = buildCommand(profile, userArgs);
+		const parts = await buildResourceParts(profile);
+		// Combine: user's cmd + resource flags + user args. We shell-exec the
+		// whole thing so the user's cmd string is interpreted naturally.
+		const allArgs = [...parts, ...userArgs].map(shellQuote);
+		fullCommand = [profile.cmd, ...allArgs];
 	} catch (err) {
 		console.error(`Error resolving resources: ${(err as Error).message}`);
 		process.exit(1);
@@ -206,7 +215,25 @@ async function main(): Promise<void> {
 	spawnShell(commandStr);
 }
 
-main().catch((err) => {
-	console.error(`Error: ${(err as Error).message}`);
-	process.exit(1);
-});
+/**
+ * True only when this module is the process entry point (i.e. invoked as
+ * `mypi ...`), not when imported (e.g. by unit tests importing
+ * `parseProfileFlag`). Guards the top-level `main()` call so importing
+ * `cli.js` does not launch a profile / spawn `pi` as a side effect.
+ */
+function isMainModule(): boolean {
+	const entry = process.argv[1];
+	if (!entry) return false;
+	try {
+		return realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url));
+	} catch {
+		return false;
+	}
+}
+
+if (isMainModule()) {
+	main().catch((err) => {
+		console.error(`Error: ${(err as Error).message}`);
+		process.exit(1);
+	});
+}

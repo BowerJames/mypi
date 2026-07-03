@@ -1,142 +1,96 @@
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { EXTENSIONS_DIR, PROMPTS_DIR, SKILLS_DIR } from "../resources.js";
-import { resolveResourceArgs } from "../run.js";
+import { BUNDLES_DIR } from "../resources.js";
+import { resolveRunArgs } from "../run.js";
 
-// Resolve against the real bundled library (resources.ts computes MYPI_ROOT
-// from import.meta.url, identical to what resolveResourceArgs uses).
-const MODE_EXT = resolve(EXTENSIONS_DIR, "mode", "index.ts");
-const REPO_EXPLORER_SKILL = resolve(SKILLS_DIR, "repo-explorer");
-const CODE_REVIEW_PROMPT = resolve(PROMPTS_DIR, "code-review.md");
+// Paths resolved by the manifests live under dist/extension-bundles/<name>/
+// once built. For the resolution test we only assert the injected flag tokens
+// and that a path was produced; the bundles.test.ts suite asserts the paths
+// exist on disk (guards the build/copy step).
+const bundleEntry = (name: string) => resolve(BUNDLES_DIR, name);
 
-describe("resolveResourceArgs", () => {
-	describe("resolves bare bundled names", () => {
-		it("resolves -e <name>", () => {
-			expect(resolveResourceArgs(["-e", "mode"])).toEqual(["-e", MODE_EXT]);
+describe("resolveRunArgs", () => {
+	describe("expands --bundle", () => {
+		it("expands --bundle <name> into pi flags", async () => {
+			const out = await resolveRunArgs(["--bundle", "mode"]);
+			// mode is extension-only: emits a single -e <path>
+			expect(out[0]).toBe("-e");
+			expect(out.length).toBe(2);
+			expect(out[1]).toContain(bundleEntry("mode"));
 		});
 
-		it("resolves --extension <name>", () => {
-			expect(resolveResourceArgs(["--extension", "mode"])).toEqual(["--extension", MODE_EXT]);
+		it("expands --bundle=<name> (equals form)", async () => {
+			const out = await resolveRunArgs(["--bundle=mode"]);
+			expect(out[0]).toBe("-e");
+			expect(out.length).toBe(2);
 		});
 
-		it("resolves --skill <name>", () => {
-			expect(resolveResourceArgs(["--skill", "repo-explorer"])).toEqual([
-				"--skill",
-				REPO_EXPLORER_SKILL,
-			]);
+		it("expands a prompt-only bundle to a --prompt-template flag", async () => {
+			const out = await resolveRunArgs(["--bundle", "code-review-prompt"]);
+			expect(out[0]).toBe("--prompt-template");
+			expect(out.length).toBe(2);
+			expect(out[1]).toContain(bundleEntry("code-review-prompt"));
 		});
 
-		it("resolves --prompt-template <name>", () => {
-			expect(resolveResourceArgs(["--prompt-template", "code-review"])).toEqual([
-				"--prompt-template",
-				CODE_REVIEW_PROMPT,
-			]);
-		});
-	});
-
-	describe("path-like values pass through untouched", () => {
-		it("./relative paths are not resolved", () => {
-			expect(resolveResourceArgs(["-e", "./mode"])).toEqual(["-e", "./mode"]);
+		it("expands a skill-only bundle to a --skill flag", async () => {
+			const out = await resolveRunArgs(["--bundle", "repo-explorer"]);
+			expect(out[0]).toBe("--skill");
+			expect(out.length).toBe(2);
 		});
 
-		it("nested relative paths are not resolved", () => {
-			expect(resolveResourceArgs(["-e", "a/b/mode"])).toEqual(["-e", "a/b/mode"]);
-		});
-
-		it("paths with a backslash are not resolved", () => {
-			expect(resolveResourceArgs(["-e", "mode\\foo"])).toEqual(["-e", "mode\\foo"]);
+		it("expands multiple --bundle flags independently", async () => {
+			const out = await resolveRunArgs(["--bundle", "mode", "--bundle", "repo-explorer"]);
+			expect(out).toEqual(["-e", out[1], "--skill", out[3]]);
 		});
 	});
 
-	describe("unknown bare names pass through silently", () => {
-		it("unknown extension is unchanged", () => {
-			expect(resolveResourceArgs(["-e", "does-not-exist"])).toEqual(["-e", "does-not-exist"]);
-		});
-
-		it("unknown skill is unchanged", () => {
-			expect(resolveResourceArgs(["--skill", "nope"])).toEqual(["--skill", "nope"]);
-		});
-	});
-
-	describe("= forms pass through untouched (matches pi)", () => {
-		it("--extension=mode is not resolved", () => {
-			expect(resolveResourceArgs(["--extension=mode"])).toEqual(["--extension=mode"]);
-		});
-
-		it("-e=mode is not resolved", () => {
-			expect(resolveResourceArgs(["-e=mode"])).toEqual(["-e=mode"]);
-		});
-
-		it("--skill=repo-explorer is not resolved", () => {
-			expect(resolveResourceArgs(["--skill=repo-explorer"])).toEqual(["--skill=repo-explorer"]);
-		});
-	});
-
-	describe("non-resource tokens are untouched", () => {
-		it("passes through other flags and messages", () => {
-			expect(resolveResourceArgs(["-p", "--model", "zai/glm-5.2", "do thing"])).toEqual([
+	describe("forwards other tokens verbatim", () => {
+		it("passes through other flags and messages around a --bundle", async () => {
+			const out = await resolveRunArgs([
 				"-p",
 				"--model",
 				"zai/glm-5.2",
+				"--bundle",
+				"mode",
 				"do thing",
 			]);
+			expect(out[0]).toBe("-p");
+			expect(out[1]).toBe("--model");
+			expect(out[2]).toBe("zai/glm-5.2");
+			expect(out[3]).toBe("-e");
+			expect(out[5]).toBe("do thing");
 		});
 
-		it("passes through @file args", () => {
-			expect(resolveResourceArgs(["@prompt.md", "-p"])).toEqual(["@prompt.md", "-p"]);
+		it("passes through path-like -e values untouched", async () => {
+			const out = await resolveRunArgs(["-e", "./local.ts"]);
+			expect(out).toEqual(["-e", "./local.ts"]);
 		});
 
-		it("a model value containing a slash is not mistaken for a path (non-resource flag)", () => {
-			expect(resolveResourceArgs(["--model", "zai/glm-5.2"])).toEqual(["--model", "zai/glm-5.2"]);
+		it("passes through @file args", async () => {
+			const out = await resolveRunArgs(["@prompt.md", "-p"]);
+			expect(out).toEqual(["@prompt.md", "-p"]);
+		});
+
+		it("a model value containing a slash is untouched", async () => {
+			const out = await resolveRunArgs(["--model", "zai/glm-5.2"]);
+			expect(out).toEqual(["--model", "zai/glm-5.2"]);
+		});
+
+		it("a token that merely starts with --bundle but is not the flag is untouched", async () => {
+			const out = await resolveRunArgs(["--bundler", "x"]);
+			expect(out).toEqual(["--bundler", "x"]);
 		});
 	});
 
 	describe("edge cases", () => {
-		it("resource flag at tail with no value is left as-is", () => {
-			expect(resolveResourceArgs(["-e"])).toEqual(["-e"]);
+		it("bare --bundle at tail with no value is left as-is", async () => {
+			const out = await resolveRunArgs(["--bundle"]);
+			expect(out).toEqual(["--bundle"]);
 		});
 
-		it("resource flag at tail followed by another flag keeps the flag", () => {
-			// The value position is itself a flag token; pi will report the
-			// error, we just forward both tokens verbatim.
-			expect(resolveResourceArgs(["-e", "--model"])).toEqual(["-e", "--model"]);
-		});
-
-		it("multiple -e flags each resolve independently", () => {
-			expect(resolveResourceArgs(["-e", "mode", "-e", "./local.ts"])).toEqual([
-				"-e",
-				MODE_EXT,
-				"-e",
-				"./local.ts",
-			]);
-		});
-
-		it("ordering is preserved for a mixed real command", () => {
-			expect(
-				resolveResourceArgs([
-					"-p",
-					"--model",
-					"zai/glm-5.2",
-					"-e",
-					"mode",
-					"--skill",
-					"repo-explorer",
-					"do thing",
-				]),
-			).toEqual([
-				"-p",
-				"--model",
-				"zai/glm-5.2",
-				"-e",
-				MODE_EXT,
-				"--skill",
-				REPO_EXPLORER_SKILL,
-				"do thing",
-			]);
-		});
-
-		it("empty args returns empty", () => {
-			expect(resolveResourceArgs([])).toEqual([]);
+		it("empty args returns empty", async () => {
+			const out = await resolveRunArgs([]);
+			expect(out).toEqual([]);
 		});
 	});
 });

@@ -73,8 +73,8 @@ mypi --profile fullstack "Fix the auth bug"
 # Uses the default profile if none specified
 mypi
 
-# Run pi directly with bundled resource name resolution (no profile/config needed)
-mypi run -p --model zai/glm-5.2 -e mode "Summarize this repo"
+# Run pi directly with bundle expansion (no profile/config needed)
+mypi run -p --model zai/glm-5.2 --bundle mode "Summarize this repo"
 mypi run --help
 
 # Interactive config editor
@@ -84,26 +84,26 @@ mypi configure --help
 
 ## Running pi directly (`mypi run`)
 
-`mypi run` forwards every argument to `pi` with no profile or config required — handy when you just want one of mypi's bundled extensions, skills, or prompts ad hoc:
+`mypi run` forwards every argument to `pi` with no profile or config required — handy when you just want one of mypi's bundles ad hoc:
 
 ```bash
-# Resolve bundled extension/skill/prompt names to their paths automatically
-mypi run -p --model zai/glm-5.2 -e mode "Summarize this repo"
-# -> pi -p --model zai/glm-5.2 -e <mypi>/extensions/mode/index.ts "Summarize this repo"
+# Expand a bundle's pi-extensions/skills/prompts into pi flags
+mypi run -p --model zai/glm-5.2 --bundle mode "Summarize this repo"
+# -> pi -p --model zai/glm-5.2 -e <mypi>/extension-bundles/mode/pi-extensions/mode/index.ts "Summarize this repo"
 
-# Skills and prompts work the same way
-mypi run --skill repo-explorer --prompt-template code-review
+# Multiple bundles, and prompt-only / skill-only bundles, all work the same way
+mypi run -p --bundle repo-explorer --bundle code-review-prompt
 
 mypi run --help
 ```
 
-For `-e`/`--extension`, `--skill`, and `--prompt-template`, a **bare name** matching a bundled resource is replaced with its on-disk path. Anything else is passed through untouched:
+`--bundle <name>` (and the `--bundle=<name>` form) is expanded into that bundle's pi flags (`-e`/`--skill`/`--prompt-template`). Anything else is passed through untouched:
 
-- Path-like values (e.g. `./mode`, `a/b/mode`) are forwarded as-is.
-- Unknown names are forwarded as-is (`pi` reports the missing file).
-- The `=` form (e.g. `-e=mode`, `--extension=mode`) is forwarded as-is, matching `pi`'s own parser.
+- Multiple `--bundle` flags are allowed; each expands independently.
+- Path-like `-e ./local.ts` and other pi flags are forwarded as-is.
+- Everything else after `run` is sent straight to `pi`.
 
-`mypi run` uses no profiles, reads no `mypi-config.yaml`, and interprets no mypi-specific flags — everything after `run` is sent to `pi`.
+`mypi run` uses no profiles, reads no `mypi-config.yaml`, and interprets no mypi-specific flags other than `--bundle`.
 
 ## Configuration
 
@@ -114,76 +114,64 @@ default: fullstack
 
 profiles:
   fullstack:
-    extensions:
-      - mode                   # from mypi's bundled library
-      - code-review            # from mypi's bundled library
-    skills:
-      - my-skill              # from mypi's bundled library
-    prompts:
-      - code-review           # from mypi's bundled library
+    bundles:
+      - mode                   # plan/develop mode system + sticky root-branch
+      - code-review            # pre-PR review guidance + /code-review-model
+      - dynamic-skills         # live shell execution inside skills
+      - loop                   # repeat messages until a terminal condition
+      - repo-explorer          # explore third-party codebases into a /tmp cache
+      - overview               # repo overview and open issues
     cmd: "pi --model claude-sonnet-4-20250514 --tools read,bash,edit,write,grep,find,ls"
 
   reviewer:
-    extensions: []
-    skills: []
-    prompts:
-      - code-review
+    bundles:
+      - code-review-prompt     # the review prompt only (no extension)
     cmd: "pi --model claude-sonnet-4-20250514 --tools read,grep,find,ls"
 ```
+
+A **bundle** is a single unit that packages related pi-extensions, skills, and prompts together, loaded by one name. See [Bundled Resources](#bundled-resources) for the full list.
 
 ### Fields
 
 | Field | Description |
 |-------|-------------|
 | `default` | Required profile to use when none is specified |
-| `profiles.<name>.extensions` | List of extension names from mypi's library |
-| `profiles.<name>.skills` | List of skill names from mypi's library |
-| `profiles.<name>.prompts` | List of prompt template names from mypi's library |
-| `profiles.<name>.cmd` | Base pi command to execute. Resources are injected automatically. |
+| `profiles.<name>.bundles` | List of bundle names from mypi's library |
+| `profiles.<name>.cmd` | Base pi command to execute. Bundle resources are injected automatically. |
 
 Any additional arguments passed on the command line are appended to the command.
 
 ### How It Works
 
-`mypi` resolves each named resource to its path inside the installed package and injects the appropriate flags into your `cmd`:
+`mypi` expands each named bundle to the on-disk paths declared in its manifest and injects the appropriate flags into your `cmd`:
 
-- `extensions` → `-e <path>` (or `-e <path>/index.ts` for directories)
-- `skills` → `--skill <path>`
-- `prompts` → `--prompt-template <path>`
+- a bundle's pi-extensions → `-e <path>`
+- a bundle's skills → `--skill <path>`
+- a bundle's prompts → `--prompt-template <path>`
 
 You control everything else (model, tools, thinking level, etc.) through the `cmd` field.
 
-`mypi run` applies the same resource name → path resolution, but without a profile: it forwards your arguments straight to `pi`, resolving bundled `-e`/`--skill`/`--prompt-template` names inline (see [Running pi directly](#running-pi-directly-mypi-run)).
+Bundles live under `extension-bundles/<name>/` inside the installed package. Each bundle's `index.ts` manifest declares its resources as paths relative to itself, so they resolve wherever npm installs the package. `mypi run` applies the same expansion via `--bundle` (see [Running pi directly](#running-pi-directly-mypi-run)).
 
-Some resources are designed to work together. For example, the `review-agent-trajectory` extension shells out to `mypi --profile review-agent-trajectory "/review-agent-trajectory <transcript>"`, so the target profile should load the prompt template but not the extension itself.
+Some bundles are designed to work together. For example, the `review-agent-trajectory` bundle (a pi-extension) shells out to `mypi --profile review-agent-trajectory "/review-agent-trajectory <transcript>"`, so the target profile loads the separate `review-agent-trajectory-prompt` bundle (prompt only) rather than the extension bundle itself — otherwise the command would re-register itself.
 
 ## Bundled Resources
 
-### Extensions
+mypi ships 11 **bundles**, each under `extension-bundles/<name>/`. Most contain a single resource type; the `code-review` and `review-agent-trajectory` features split into an extension bundle and a prompt-only bundle (the prompt must be loadable without the extension for the review subprocess).
 
-| Name | Description |
-|------|-------------|
-| `mode` | Plan/develop mode system — `/plan`, `/develop`, `/mode <name>` commands. Root branch auto-defaults to the current git branch on first start and persists (sticky across resume); set/clear via `/root-branch` (clear is sticky and suppresses re-defaulting) |
-| `code-review` | Appends a "run an independent review before a PR" system-prompt section and provides `/code-review-model` to set the recommended review model (defaults to the active session model) |
-| `review-agent-trajectory` | Session trajectory review command — captures the current conversation and launches a review pass |
-| `btw` | Non-blocking one-off side tasks on a throwaway in-memory clone — `/btw <task>` runs in parallel without interrupting the main stream, and its result is shown in the TUI but kept out of the main agent's context. Each task is wrapped in a guardrail so the clone scopes itself to the side task and does not continue the main agent's work |
-| `loop` | Repeat messages until a terminal condition — `/loop [--terminal-regex <re>] [--max-iter <n>] --loop ["msg",...]` resets the session to the original point after every item (and between iterations) via tree navigation, so each item runs from a clean slate and the session ends back at the anchor |
-| `dynamic-skills` | Live shell execution inside skills — inline `!\`cmd\`` and fenced ```!``` blocks are replaced with their output at skill load (covers `/skill:name` and `read` of `SKILL.md`) |
-| `render-raw` | Append a raw (unformatted) rendering of the last assistant reply — `/render-raw` injects a custom-typed copy of the reply rendered as plain text (literal markdown), shown in the TUI but kept out of the main agent's context. Additive, not a toggle; a re-run against the same reply is a no-op |
-
-### Skills
-
-| Name | Description |
-|------|-------------|
-| `repo-explorer` | Explore third-party codebases/libraries/frameworks without cluttering the active workspace — clones into a `/tmp/repos/` cache and reuses existing checkouts |
-
-### Prompt Templates
-
-| Name | Description |
-|------|-------------|
-| `overview` | Overview of the repository, core components, and open issues |
-| `code-review` | Independent code review of an issue's implementation on a branch. Usage: `/code-review <issue_number> <branch_to_review> <target_branch_of_pr>` |
-| `review-agent-trajectory` | Review a full agent session transcript for skill gaps, improvements, and missing guidance |
+| Bundle | Contains | Description |
+|--------|----------|-------------|
+| `mode` | pi-extension | Plan/develop mode system — `/plan`, `/develop`, `/mode <name>` commands. Root branch auto-defaults to the current git branch on first start and persists (sticky across resume); set/clear via `/root-branch` (clear is sticky and suppresses re-defaulting) |
+| `btw` | pi-extension | Non-blocking one-off side tasks on a throwaway in-memory clone — `/btw <task>` runs in parallel without interrupting the main stream, and its result is shown in the TUI but kept out of the main agent's context. Each task is wrapped in a guardrail so the clone scopes itself to the side task and does not continue the main agent's work |
+| `loop` | pi-extension | Repeat messages until a terminal condition — `/loop [--terminal-regex <re>] [--max-iter <n>] --loop ["msg",...]` resets the session to the original point after every item (and between iterations) via tree navigation, so each item runs from a clean slate and the session ends back at the anchor |
+| `dynamic-skills` | pi-extension | Live shell execution inside skills — inline `!\`cmd\`` and fenced ```!``` blocks are replaced with their output at skill load (covers `/skill:name` and `read` of `SKILL.md`) |
+| `render-raw` | pi-extension | Append a raw (unformatted) rendering of the last assistant reply — `/render-raw` injects a custom-typed copy of the reply rendered as plain text (literal markdown), shown in the TUI but kept out of the main agent's context. Additive, not a toggle; a re-run against the same reply is a no-op |
+| `code-review` | pi-extension | Appends a "run an independent review before a PR" system-prompt section and provides `/code-review-model` to set the recommended review model (defaults to the active session model) |
+| `code-review-prompt` | prompt | Independent code review of an issue's implementation on a branch. Usage: `/code-review <issue_number> <branch_to_review> <target_branch_of_pr>` |
+| `review-agent-trajectory` | pi-extension | Session trajectory review command — captures the current conversation and launches a review pass |
+| `review-agent-trajectory-prompt` | prompt | Review a full agent session transcript for skill gaps, improvements, and missing guidance |
+| `repo-explorer` | skill | Explore third-party codebases/libraries/frameworks without cluttering the active workspace — clones into a `/tmp/repos/` cache and reuses existing checkouts |
+| `overview` | prompt | Overview of the repository, core components, and open issues |
 
 ### Dynamic Skills
 
@@ -217,20 +205,20 @@ When a skill body has no shell syntax, output is byte-identical to pi's built-in
 
 ### Code Review
 
-The `code-review` extension moves the pre-PR review guidance out of shared `AGENTS.md` files so it only affects agents that opt in by enabling the extension. When enabled it:
+The `code-review` bundle moves the pre-PR review guidance out of shared `AGENTS.md` files so it only affects agents that opt in by enabling the bundle. When enabled it:
 
 - Appends a "## Code Review" section to the system prompt each turn, instructing the agent to run an independent review before opening a pull request:
 
   ```
-  mypi run -p --model <model> --tools read,grep,find,ls --prompt-template code-review "/code-review <issue_number> <branch_to_review> <target_branch_of_pr>"
+  mypi run -p --model <model> --tools read,grep,find,ls --bundle code-review-prompt "/code-review <issue_number> <branch_to_review> <target_branch_of_pr>"
   ```
 
-  The review runs with read-only tools (`read,grep,find,ls`) for defense-in-depth, even though the `code-review` prompt itself instructs the reviewer never to apply fixes.
+  The review runs with read-only tools (`read,grep,find,ls`) for defense-in-depth, even though the `code-review-prompt` prompt itself instructs the reviewer never to apply fixes.
 - Provides `/code-review-model [<model>]` to set the recommended review model. With no argument it clears the configured model. The choice is persisted across sessions (restored on `/resume`, `/new`, `/reload`).
 - Falls back to the **active session model** (`provider/id`) when no model is configured, so the guidance appears out of the box.
 - Shows a `🔍 review:` status indicator in the footer: the explicitly-configured model in the accent color, and the active-fallback model in a warning color (prefixed `(active)`).
 
-Because the review subprocess is launched via `mypi run` (which loads no extensions and no profiles), the reviewer agent does not re-append this section — only the interactive session that enables `code-review` sees the guidance.
+Because the review subprocess is launched via `mypi run --bundle code-review-prompt` (the prompt-only bundle, which loads no extension), the reviewer agent does not re-append this section — only the interactive session that enables the `code-review` bundle sees the guidance.
 
 ### btw
 
@@ -256,7 +244,7 @@ This creates the issue in the background while the main agent continues toward b
 - The clone reproduces the parent's **built-in tools only** (`read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`), intersected with the parent's active set. Extension-registered custom tools, event handlers, and slash commands are not re-instantiated inside the clone. The built-in `bash` tool covers the primary use case (e.g. `gh issue create`).
 - Result display uses `notify`'s info path, which coalesces consecutive status lines: if two btw tasks complete with no other chat activity between them, only the latest result line is shown. The common case (btw running *during* the main stream, where the main agent's messages land between completions) is unaffected. (The full text of every result is still persisted to `/tmp/btw-<uuid>.md`, so a coalesced-away line remains recoverable via its pointer file.)
 
-Enable it by adding `btw` to a profile's `extensions` list.
+Enable it by adding `btw` to a profile's `bundles` list.
 
 ### loop
 
@@ -297,7 +285,7 @@ The loop always terminates: `--max-iter` is a hard cap (default 10), and `--term
 - The reset is **conversation-level**: in-memory state of other extensions (e.g. a toggled `/plan`) is not reset, since the loop stays in one session.
 - The terminal regex matches the **final assistant text** of the iteration, so the last `--loop` item should be one that produces an assistant response for the regex to be meaningful.
 
-Enable it by adding `loop` to a profile's `extensions` list.
+Enable it by adding `loop` to a profile's `bundles` list.
 
 ### render-raw
 
@@ -315,13 +303,13 @@ It exists because pi renders every assistant text block through its built-in `Ma
 
 **Dedupe.** `SessionManager` exposes no entry removal, so a naive toggle would stack duplicate raw copies. Instead, `/render-raw` only appends a new copy when the last assistant reply's text differs from the one already rendered (tracked in memory and reconstructed from the session on `/reload`, `/resume`, `/new`). Re-running `/render-raw` for the same reply notifies "last reply is already rendered raw" instead of duplicating; after a new reply it renders again.
 
-Enable it by adding `render-raw` to a profile's `extensions` list.
+Enable it by adding `render-raw` to a profile's `bundles` list.
 
 ## Development
 
 ```bash
 npm install          # installs pi packages + tooling as devDependencies
-npm run typecheck    # tsc --noEmit over src/ and extensions/
+npm run typecheck    # tsc --noEmit over src/ (including extension bundles)
 npm run lint         # biome check (lint + format + import sorting)
 npm run lint:fix     # biome check --write (applies auto-fixes)
 npm test             # vitest run
@@ -340,7 +328,7 @@ every `git commit`:
    same commit. Unfixable lint errors exit non-zero and block the commit.
    Staged files Biome doesn't handle (e.g. `.md`) are skipped automatically.
 2. **`tsc`** — whole-project typecheck (`tsc -p tsconfig.check.json`) over
-   `src/` and `extensions/`.
+   `src/` (including the extension bundles).
 
 Hooks are installed automatically by the `prepare` script when you run
 `npm install`. To bypass the hooks for a single commit:
