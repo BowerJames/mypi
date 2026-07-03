@@ -1,54 +1,75 @@
+/**
+ * Bundle discovery & resolution.
+ *
+ * Bundles live alongside this module: at runtime under
+ * `dist/extension-bundles/<name>/` (compiled from `src/extension-bundles/`),
+ * and under source/test as `src/extension-bundles/<name>/`. Each bundle's
+ * manifest declares the on-disk paths to its pi-extensions, skills, and
+ * prompts, computed relative to itself via `import.meta.url`, so they resolve
+ * wherever npm installs the package.
+ *
+ * `BUNDLES_DIR` is a *sibling* of this file (`dirname(import.meta.url)` +
+ * `extension-bundles`), which holds in both layouts: `dist/extension-bundles`
+ * at runtime and `src/extension-bundles` under vitest.
+ *
+ * mypi never imports the pi-extension/skill/prompt *code* — it only resolves
+ * their paths and hands them to `pi` as `-e`/`--skill`/`--prompt-template`
+ * flags. Manifests are loaded via dynamic `import()`, so resolution is async.
+ *
+ * Manifests are `.js` when compiled (runtime) and `.ts` under source (vitest);
+ * both extensions are tolerated.
+ */
+
 import { existsSync, readdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import type { ExtensionBundleManifest, ResolvedBundle } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Paths
 // ---------------------------------------------------------------------------
 
 const __filename = fileURLToPath(import.meta.url);
-const MYPI_ROOT = resolve(dirname(__filename), "..");
 
-export const EXTENSIONS_DIR = resolve(MYPI_ROOT, "extensions");
-export const SKILLS_DIR = resolve(MYPI_ROOT, "skills");
-export const PROMPTS_DIR = resolve(MYPI_ROOT, "prompts");
+/** Sibling `extension-bundles/` dir — `dist/extension-bundles` or `src/extension-bundles`. */
+export const BUNDLES_DIR = resolve(dirname(__filename), "extension-bundles");
+
+/** Candidate manifest entry files, in preference order (.js compiled, .ts source). */
+const MANIFEST_FILES = ["index.js", "index.ts"] as const;
 
 // ---------------------------------------------------------------------------
-// Resource discovery
+// Manifest path resolution
 // ---------------------------------------------------------------------------
 
-export function discoverExtensions(): string[] {
-	if (!existsSync(EXTENSIONS_DIR)) return [];
-
-	const names: string[] = [];
-
-	for (const entry of readdirSync(EXTENSIONS_DIR, { withFileTypes: true })) {
-		if (entry.isDirectory()) {
-			// Directory with index.ts or index.js
-			if (
-				existsSync(resolve(EXTENSIONS_DIR, entry.name, "index.ts")) ||
-				existsSync(resolve(EXTENSIONS_DIR, entry.name, "index.js"))
-			) {
-				names.push(entry.name);
-			}
-		} else if (entry.isFile()) {
-			const ext = entry.name.endsWith(".ts") ? ".ts" : entry.name.endsWith(".js") ? ".js" : "";
-			if (ext) {
-				names.push(entry.name.slice(0, -ext.length));
-			}
-		}
+/**
+ * Resolve the on-disk manifest file for a bundle, tolerating both the compiled
+ * `.js` (runtime) and source `.ts` (vitest) forms.
+ *
+ * Returns the absolute path to the manifest, or `undefined` if none exists.
+ */
+function manifestFile(name: string): string | undefined {
+	for (const file of MANIFEST_FILES) {
+		const candidate = resolve(BUNDLES_DIR, name, file);
+		if (existsSync(candidate)) return candidate;
 	}
-
-	return names.sort();
+	return undefined;
 }
 
-export function discoverSkills(): string[] {
-	if (!existsSync(SKILLS_DIR)) return [];
+// ---------------------------------------------------------------------------
+// Discovery (sync)
+// ---------------------------------------------------------------------------
+
+/**
+ * List every bundle by name (sorted). A bundle is a directory under
+ * `extension-bundles/` containing a manifest (`index.js` or `index.ts`).
+ */
+export function discoverBundles(): string[] {
+	if (!existsSync(BUNDLES_DIR)) return [];
 
 	const names: string[] = [];
 
-	for (const entry of readdirSync(SKILLS_DIR, { withFileTypes: true })) {
-		if (entry.isDirectory() && existsSync(resolve(SKILLS_DIR, entry.name, "SKILL.md"))) {
+	for (const entry of readdirSync(BUNDLES_DIR, { withFileTypes: true })) {
+		if (entry.isDirectory() && manifestFile(entry.name)) {
 			names.push(entry.name);
 		}
 	}
@@ -56,53 +77,56 @@ export function discoverSkills(): string[] {
 	return names.sort();
 }
 
-export function discoverPrompts(): string[] {
-	if (!existsSync(PROMPTS_DIR)) return [];
+/**
+ * Quick sync existence check for a bundle (directory + manifest present).
+ * Used for validation and error messages without the cost of a dynamic import.
+ */
+export function bundleExists(name: string): boolean {
+	return manifestFile(name) !== undefined;
+}
 
-	const names: string[] = [];
+// ---------------------------------------------------------------------------
+// Resolution (async — manifests are loaded via dynamic import)
+// ---------------------------------------------------------------------------
 
-	for (const entry of readdirSync(PROMPTS_DIR, { withFileTypes: true })) {
-		if (entry.isFile() && entry.name.endsWith(".md")) {
-			names.push(entry.name.slice(0, -".md".length));
-		}
+/**
+ * Load a bundle's manifest via dynamic `import()`.
+ *
+ * Throws a clear error if the bundle is missing or its manifest cannot be
+ * loaded / lacks a default export.
+ */
+export async function loadBundle(name: string): Promise<ExtensionBundleManifest> {
+	const path = manifestFile(name);
+	if (!path) {
+		throw new Error(
+			`Bundle "${name}" not found. Expected a manifest at:\n` +
+				`  ${resolve(BUNDLES_DIR, name, "index.js")}`,
+		);
 	}
 
-	return names.sort();
+	let mod: { default?: unknown };
+	try {
+		mod = (await import(pathToFileURL(path).href)) as { default?: unknown };
+	} catch (err) {
+		throw new Error(`Failed to load bundle "${name}": ${(err as Error).message}`);
+	}
+
+	const manifest = mod.default;
+	if (!manifest || typeof manifest !== "object") {
+		throw new Error(`Bundle "${name}" manifest has no valid default export.`);
+	}
+
+	return manifest as ExtensionBundleManifest;
 }
 
-// ---------------------------------------------------------------------------
-// Resource resolution
-// ---------------------------------------------------------------------------
-
-export function resolveExtension(name: string): string {
-	const asFileTs = resolve(EXTENSIONS_DIR, `${name}.ts`);
-	if (existsSync(asFileTs)) return asFileTs;
-
-	const asFileJs = resolve(EXTENSIONS_DIR, `${name}.js`);
-	if (existsSync(asFileJs)) return asFileJs;
-
-	const asDirTs = resolve(EXTENSIONS_DIR, name, "index.ts");
-	if (existsSync(asDirTs)) return asDirTs;
-
-	const asDirJs = resolve(EXTENSIONS_DIR, name, "index.js");
-	if (existsSync(asDirJs)) return asDirJs;
-
-	throw new Error(
-		`Extension "${name}" not found. Searched:\n` +
-			`  ${asFileTs}\n  ${asFileJs}\n  ${asDirTs}\n  ${asDirJs}`,
-	);
-}
-
-export function resolveSkill(name: string): string {
-	const dir = resolve(SKILLS_DIR, name);
-	if (existsSync(resolve(dir, "SKILL.md"))) return dir;
-
-	throw new Error(`Skill "${name}" not found. Expected directory at:\n  ${dir}/SKILL.md`);
-}
-
-export function resolvePrompt(name: string): string {
-	const asMd = resolve(PROMPTS_DIR, `${name}.md`);
-	if (existsSync(asMd)) return asMd;
-
-	throw new Error(`Prompt "${name}" not found. Expected file at:\n  ${asMd}`);
+/**
+ * Resolve a bundle to its on-disk resource paths (all facets).
+ */
+export async function expandBundle(name: string): Promise<ResolvedBundle> {
+	const manifest = await loadBundle(name);
+	return {
+		piExtensions: [...manifest.piExtensions],
+		skills: [...manifest.skills],
+		prompts: [...manifest.prompts],
+	};
 }

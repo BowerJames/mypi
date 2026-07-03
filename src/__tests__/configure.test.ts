@@ -1,6 +1,14 @@
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { isValidProfileName, orderMultiSelectResult } from "../configure.js";
-import { discoverExtensions, discoverPrompts, discoverSkills } from "../resources.js";
+import {
+	BUNDLES_DIR,
+	bundleExists,
+	discoverBundles,
+	expandBundle,
+	loadBundle,
+} from "../resources.js";
 
 describe("isValidProfileName", () => {
 	it("accepts simple names", () => {
@@ -34,43 +42,68 @@ describe("isValidProfileName", () => {
 	});
 });
 
-describe("discoverExtensions", () => {
-	it("discovers the bundled extensions", () => {
-		const exts = discoverExtensions();
-		expect(exts).toContain("code-review");
-		expect(exts).toContain("mode");
-		expect(exts).toContain("review-agent-trajectory");
+describe("discoverBundles", () => {
+	it("discovers the bundled extension bundles", () => {
+		const bundles = discoverBundles();
+		expect(bundles).toContain("mode");
+		expect(bundles).toContain("btw");
+		expect(bundles).toContain("loop");
+		expect(bundles).toContain("dynamic-skills");
+		expect(bundles).toContain("render-raw");
+		expect(bundles).toContain("code-review");
+		expect(bundles).toContain("code-review-prompt");
+		expect(bundles).toContain("review-agent-trajectory");
+		expect(bundles).toContain("review-agent-trajectory-prompt");
+		expect(bundles).toContain("repo-explorer");
+		expect(bundles).toContain("overview");
 	});
 
 	it("returns a sorted array", () => {
-		const exts = discoverExtensions();
-		expect(exts).toEqual([...exts].sort());
+		const bundles = discoverBundles();
+		expect(bundles).toEqual([...bundles].sort());
 	});
 });
 
-describe("discoverPrompts", () => {
-	it("discovers the bundled prompt templates", () => {
-		const prompts = discoverPrompts();
-		expect(prompts).toContain("overview");
-		expect(prompts).toContain("code-review");
-		expect(prompts).toContain("review-agent-trajectory");
+describe("bundleExists", () => {
+	it("returns true for a known bundle", () => {
+		expect(bundleExists("mode")).toBe(true);
 	});
 
-	it("returns a sorted array", () => {
-		const prompts = discoverPrompts();
-		expect(prompts).toEqual([...prompts].sort());
+	it("returns false for an unknown bundle", () => {
+		expect(bundleExists("does-not-exist")).toBe(false);
 	});
 });
 
-describe("discoverSkills", () => {
-	it("discovers the bundled skills", () => {
-		const skills = discoverSkills();
-		expect(skills).toContain("repo-explorer");
+describe("loadBundle / expandBundle", () => {
+	it("loads the mode manifest and reports its name", async () => {
+		const manifest = await loadBundle("mode");
+		expect(manifest.name).toBe("mode");
 	});
 
-	it("returns a sorted array", () => {
-		const skills = discoverSkills();
-		expect(skills).toEqual([...skills].sort());
+	it("expands mode to a single pi-extension path that exists on disk", async () => {
+		const resolved = await expandBundle("mode");
+		expect(resolved.piExtensions.length).toBe(1);
+		expect(resolved.skills).toEqual([]);
+		expect(resolved.prompts).toEqual([]);
+		expect(existsSync(resolved.piExtensions[0])).toBe(true);
+	});
+
+	it("expands code-review-prompt to a single prompt path that exists on disk", async () => {
+		const resolved = await expandBundle("code-review-prompt");
+		expect(resolved.prompts.length).toBe(1);
+		expect(resolved.piExtensions).toEqual([]);
+		expect(resolved.skills).toEqual([]);
+		expect(existsSync(resolved.prompts[0])).toBe(true);
+	});
+
+	it("expands repo-explorer to a single skill path that exists on disk", async () => {
+		const resolved = await expandBundle("repo-explorer");
+		expect(resolved.skills.length).toBe(1);
+		expect(existsSync(resolve(BUNDLES_DIR, "repo-explorer", "skills", "repo-explorer"))).toBe(true);
+	});
+
+	it("throws on an unknown bundle", async () => {
+		await expect(loadBundle("nope")).rejects.toThrow(/not found/);
 	});
 });
 

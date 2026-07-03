@@ -51,7 +51,7 @@ export function buildCodeReviewPromptSuffix(model: string | undefined): string {
 		"Before opening a pull request, an independent review must be run using:\n\n" +
 		"`mypi run -p --model " +
 		modelArg +
-		' --prompt-template code-review "/code-review <issue_number> <branch_to_review> <target_branch_of_pr>"`\n\n' +
+		' --bundle code-review-prompt "/code-review <issue_number> <branch_to_review> <target_branch_of_pr>"`\n\n' +
 		"Review the findings with the user before proceeding with further development or the pull request. Reviews can take a while so make sure you set the bash timeout to 1000 seconds.\n"
 	);
 }

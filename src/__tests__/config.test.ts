@@ -19,15 +19,13 @@ describe("validateConfig", () => {
 			profiles: {
 				fullstack: {
 					cmd: "pi --model claude",
-					extensions: ["mode"],
-					skills: [],
-					prompts: ["code-review"],
+					bundles: ["mode"],
 				},
 			},
 		};
 		const config = validateConfig(raw);
 		expect(config.default).toBe("fullstack");
-		expect(config.profiles.fullstack.extensions).toEqual(["mode"]);
+		expect(config.profiles.fullstack.bundles).toEqual(["mode"]);
 	});
 
 	it("throws on null input", () => {
@@ -93,33 +91,19 @@ describe("validateConfig", () => {
 		);
 	});
 
-	it("throws when extensions is not an array of strings", () => {
+	it("throws when bundles is not an array of strings", () => {
 		expect(() =>
-			validateConfig({ default: "a", profiles: { a: { cmd: "pi", extensions: "mode" } } }),
+			validateConfig({ default: "a", profiles: { a: { cmd: "pi", bundles: "mode" } } }),
 		).toThrow(ConfigError);
 
 		expect(() =>
-			validateConfig({ default: "a", profiles: { a: { cmd: "pi", extensions: [123] } } }),
-		).toThrow(ConfigError);
-	});
-
-	it("throws when skills is not an array of strings", () => {
-		expect(() =>
-			validateConfig({ default: "a", profiles: { a: { cmd: "pi", skills: [true] } } }),
-		).toThrow(ConfigError);
-	});
-
-	it("throws when prompts is not an array of strings", () => {
-		expect(() =>
-			validateConfig({ default: "a", profiles: { a: { cmd: "pi", prompts: [1, 2] } } }),
+			validateConfig({ default: "a", profiles: { a: { cmd: "pi", bundles: [123] } } }),
 		).toThrow(ConfigError);
 	});
 
 	it("omits optional arrays from profiles when not present", () => {
 		const config = validateConfig({ default: "a", profiles: { a: { cmd: "pi" } } });
-		expect(config.profiles.a.extensions).toBeUndefined();
-		expect(config.profiles.a.skills).toBeUndefined();
-		expect(config.profiles.a.prompts).toBeUndefined();
+		expect(config.profiles.a.bundles).toBeUndefined();
 	});
 });
 
@@ -195,7 +179,7 @@ describe("loadConfig / saveConfig", () => {
 	it("throws ConfigError when profile has no cmd", () => {
 		writeFileSync(
 			resolve(testDir, "mypi-config.yaml"),
-			"default: test\nprofiles:\n  test:\n    extensions:\n      - mode\n",
+			"default: test\nprofiles:\n  test:\n    bundles:\n      - mode\n",
 		);
 		try {
 			loadConfig(testDir);
@@ -206,17 +190,17 @@ describe("loadConfig / saveConfig", () => {
 		}
 	});
 
-	it("throws ConfigError when extensions contains non-string", () => {
+	it("throws ConfigError when bundles contains non-string", () => {
 		writeFileSync(
 			resolve(testDir, "mypi-config.yaml"),
-			"default: test\nprofiles:\n  test:\n    cmd: pi\n    extensions:\n      - 123\n",
+			"default: test\nprofiles:\n  test:\n    cmd: pi\n    bundles:\n      - 123\n",
 		);
 		try {
 			loadConfig(testDir);
 			expect.unreachable("Should have thrown");
 		} catch (err) {
 			expect(err).toBeInstanceOf(ConfigError);
-			expect((err as ConfigError).message).toContain("extensions");
+			expect((err as ConfigError).message).toContain("bundles");
 		}
 	});
 
@@ -226,8 +210,7 @@ describe("loadConfig / saveConfig", () => {
 			profiles: {
 				dev: {
 					cmd: "pi --model claude",
-					extensions: ["mode"],
-					prompts: ["code-review"],
+					bundles: ["mode"],
 				},
 			},
 		};
@@ -237,7 +220,6 @@ describe("loadConfig / saveConfig", () => {
 		expect(loaded.default).toBe("dev");
 		expect(Object.keys(loaded.profiles)).toEqual(["dev"]);
 		expect(loaded.profiles.dev.cmd).toBe("pi --model claude");
-		expect(loaded.profiles.dev.extensions).toEqual(["mode"]);
-		expect(loaded.profiles.dev.prompts).toEqual(["code-review"]);
+		expect(loaded.profiles.dev.bundles).toEqual(["mode"]);
 	});
 });

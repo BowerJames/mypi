@@ -1,7 +1,7 @@
 import { stdin as input, stdout as output } from "node:process";
 import { createInterface } from "node:readline/promises";
 import { loadConfig, saveConfig } from "./config.js";
-import { discoverExtensions, discoverPrompts, discoverSkills } from "./resources.js";
+import { discoverBundles } from "./resources.js";
 import type { Config, Profile } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -210,9 +210,7 @@ function displayConfig(config: Config): void {
 
 function displayProfile(profile: Profile): void {
 	console.log(`  cmd: "${profile.cmd}"`);
-	console.log(`  extensions: ${formatList(profile.extensions ?? [])}`);
-	console.log(`  skills: ${formatList(profile.skills ?? [])}`);
-	console.log(`  prompts: ${formatList(profile.prompts ?? [])}`);
+	console.log(`  bundles: ${formatList(profile.bundles ?? [])}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -318,21 +316,11 @@ async function addProfile(rl: Readline, config: Config, isCancelled: () => boole
 	}
 
 	const cmd = await promptRequired(rl, "cmd: ", isCancelled);
-	const extensions = await promptMultiSelect(
-		rl,
-		"Extensions",
-		discoverExtensions(),
-		[],
-		isCancelled,
-	);
-	const skills = await promptMultiSelect(rl, "Skills", discoverSkills(), [], isCancelled);
-	const prompts = await promptMultiSelect(rl, "Prompts", discoverPrompts(), [], isCancelled);
+	const bundles = await promptMultiSelect(rl, "Bundles", discoverBundles(), [], isCancelled);
 
 	config.profiles[name] = {
 		cmd,
-		...(extensions.length > 0 && { extensions }),
-		...(skills.length > 0 && { skills }),
-		...(prompts.length > 0 && { prompts }),
+		...(bundles.length > 0 && { bundles }),
 	};
 
 	const setDefault = await promptYesNo(rl, `Set "${name}" as the default profile?`, isCancelled);
@@ -383,10 +371,8 @@ async function editProfile(
 		console.log(`\n  Editing profile: ${name}`);
 		displayProfile(profile);
 		console.log("\n  1. Edit cmd");
-		console.log("  2. Edit extensions");
-		console.log("  3. Edit skills");
-		console.log("  4. Edit prompts");
-		console.log("  5. Back\n");
+		console.log("  2. Edit bundles");
+		console.log("  3. Back\n");
 
 		const choice = await promptRequired(rl, "Choose an option: ", isCancelled);
 
@@ -403,45 +389,21 @@ async function editProfile(
 				break;
 			}
 			case "2": {
-				const newExts = await promptMultiSelect(
+				const newBundles = await promptMultiSelect(
 					rl,
-					"Extensions",
-					discoverExtensions(),
-					profile.extensions ?? [],
+					"Bundles",
+					discoverBundles(),
+					profile.bundles ?? [],
 					isCancelled,
 				);
-				profile.extensions = newExts.length > 0 ? newExts : undefined;
-				console.log("  extensions updated.");
+				profile.bundles = newBundles.length > 0 ? newBundles : undefined;
+				console.log("  bundles updated.");
 				break;
 			}
-			case "3": {
-				const newSkills = await promptMultiSelect(
-					rl,
-					"Skills",
-					discoverSkills(),
-					profile.skills ?? [],
-					isCancelled,
-				);
-				profile.skills = newSkills.length > 0 ? newSkills : undefined;
-				console.log("  skills updated.");
-				break;
-			}
-			case "4": {
-				const newPrompts = await promptMultiSelect(
-					rl,
-					"Prompts",
-					discoverPrompts(),
-					profile.prompts ?? [],
-					isCancelled,
-				);
-				profile.prompts = newPrompts.length > 0 ? newPrompts : undefined;
-				console.log("  prompts updated.");
-				break;
-			}
-			case "5":
+			case "3":
 				return;
 			default:
-				console.log("  Invalid option. Please enter a number 1-5.");
+				console.log("  Invalid option. Please enter a number 1-3.");
 		}
 	}
 }
