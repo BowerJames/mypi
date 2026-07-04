@@ -1,8 +1,9 @@
 import { stdin as input, stdout as output } from "node:process";
 import { createInterface } from "node:readline/promises";
-import { loadConfig, saveConfig } from "./config.js";
+import { loadUserConfig, saveConfig } from "./config.js";
+import { BUILTIN_PROFILES, isBuiltinProfile, mergeProfiles } from "./profiles.js";
 import { discoverBundles } from "./resources.js";
-import type { Config, Profile } from "./types.js";
+import type { Profile, UserConfig } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -202,10 +203,33 @@ function formatList(items: string[]): string {
 	return items.join(", ");
 }
 
-function displayConfig(config: Config): void {
-	console.log(`\n  default: ${config.default ?? "(none)"}`);
-	const profileNames = Object.keys(config.profiles);
-	console.log(`  profiles: ${formatList(profileNames)}\n`);
+/**
+ * Human-friendly annotation for a profile in the merged set.
+ * - built-in with no user override → "[built-in]"
+ * - built-in that the user has overridden → "[built-in, overridden]"
+ * - pure user profile → "(custom)"
+ */
+function profileAnnotation(name: string, overlay: UserConfig): string {
+	if (isBuiltinProfile(name)) {
+		return overlay.profiles && name in overlay.profiles ? "[built-in, overridden]" : "[built-in]";
+	}
+	return "(custom)";
+}
+
+/** Effective default resolved from overlay + built-in fallback. */
+function effectiveDefault(overlay: UserConfig): string {
+	return overlay.default ?? "developer";
+}
+
+function displayConfig(overlay: UserConfig): void {
+	const merged = mergeProfiles(overlay.profiles);
+	console.log(
+		`\n  default: ${effectiveDefault(overlay)} (set in overlay: ${overlay.default ?? "—"})`,
+	);
+	const profileNames = Object.keys(merged);
+	console.log(
+		`  profiles: ${formatList(profileNames.map((n) => `${n} ${profileAnnotation(n, overlay)}`))}\n`,
+	);
 }
 
 function displayProfile(profile: Profile): void {
@@ -218,7 +242,7 @@ function displayProfile(profile: Profile): void {
 // ---------------------------------------------------------------------------
 
 export async function configureConfig(cwd: string): Promise<void> {
-	const config = loadConfig(cwd);
+	const overlay: UserConfig = loadUserConfig(cwd);
 	const rl = createReadline();
 	let cancelled = false;
 	let cleanedUp = false;
@@ -242,7 +266,7 @@ export async function configureConfig(cwd: string): Promise<void> {
 	try {
 		while (true) {
 			console.log("\n╭── mypi configure ──────────────────────────────╮");
-			displayConfig(config);
+			displayConfig(overlay);
 			console.log("  1. Set default profile");
 			console.log("  2. Add profile");
 			console.log("  3. Remove profile");
@@ -255,19 +279,19 @@ export async function configureConfig(cwd: string): Promise<void> {
 
 			switch (choice) {
 				case "1":
-					await setDefault(rl, config, isCancelled);
+					await setDefault(rl, overlay, isCancelled);
 					break;
 				case "2":
-					await addProfile(rl, config, isCancelled);
+					await addProfile(rl, overlay, isCancelled);
 					break;
 				case "3":
-					await removeProfile(rl, config, isCancelled);
+					await removeProfile(rl, overlay, isCancelled);
 					break;
 				case "4":
-					await editProfile(rl, config, isCancelled);
+					await editProfile(rl, overlay, isCancelled);
 					break;
 				case "5":
-					saveConfig(cwd, config);
+					saveConfig(cwd, overlay);
 					console.log("\n  Config saved to mypi-config.yaml\n");
 					return;
 				case "6":
@@ -287,22 +311,31 @@ export async function configureConfig(cwd: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Sub-flows
+// Sub-flows (operate on the user overlay only; built-ins are visible but not removable)
 // ---------------------------------------------------------------------------
 
-async function setDefault(rl: Readline, config: Config, isCancelled: () => boolean): Promise<void> {
-	const profileNames = Object.keys(config.profiles);
+async function setDefault(
+	rl: Readline,
+	overlay: UserConfig,
+	isCancelled: () => boolean,
+): Promise<void> {
+	const merged = mergeProfiles(overlay.profiles);
+	const profileNames = Object.keys(merged);
 	if (profileNames.length === 0) {
 		console.log("  No profiles available.");
 		return;
 	}
 
 	const name = await promptChoice(rl, "Select default profile:", profileNames, isCancelled);
-	config.default = name;
+	overlay.default = name;
 	console.log(`\n  Default profile set to: ${name}`);
 }
 
-async function addProfile(rl: Readline, config: Config, isCancelled: () => boolean): Promise<void> {
+async function addProfile(
+	rl: Readline,
+	overlay: UserConfig,
+	isCancelled: () => boolean,
+): Promise<void> {
 	const name = await promptRequired(rl, "Profile name: ", isCancelled);
 
 	if (!isValidProfileName(name)) {
@@ -310,65 +343,120 @@ async function addProfile(rl: Readline, config: Config, isCancelled: () => boole
 		return;
 	}
 
-	if (config.profiles[name]) {
-		console.log(`  Profile "${name}" already exists.`);
+	// Collisions with a *user* overlay profile are an error. Collisions with a
+	// built-in are allowed (the new entry overrides it), but we warn so the
+	// user knows they are replacing a shipped profile.
+	if (overlay.profiles && name in overlay.profiles) {
+		console.log(`  Profile "${name}" already exists in your config.`);
 		return;
+	}
+
+	const overridesBuiltin = isBuiltinProfile(name);
+	if (overridesBuiltin) {
+		const proceed = await promptYesNo(
+			rl,
+			`"${name}" is a built-in profile. Add a user override that replaces it?`,
+			isCancelled,
+		);
+		if (!proceed) {
+			console.log("  Aborted.");
+			return;
+		}
 	}
 
 	const cmd = await promptRequired(rl, "cmd: ", isCancelled);
 	const bundles = await promptMultiSelect(rl, "Bundles", discoverBundles(), [], isCancelled);
 
-	config.profiles[name] = {
+	if (!overlay.profiles) overlay.profiles = {};
+	overlay.profiles[name] = {
 		cmd,
 		...(bundles.length > 0 && { bundles }),
 	};
 
 	const setDefault = await promptYesNo(rl, `Set "${name}" as the default profile?`, isCancelled);
 	if (setDefault) {
-		config.default = name;
+		overlay.default = name;
 	}
 
-	console.log(`\n  Profile "${name}" added.`);
+	console.log(`\n  Profile "${name}" added${overridesBuiltin ? " (overrides built-in)" : ""}.`);
 }
 
 async function removeProfile(
 	rl: Readline,
-	config: Config,
+	overlay: UserConfig,
 	isCancelled: () => boolean,
 ): Promise<void> {
-	const profileNames = Object.keys(config.profiles);
-	if (profileNames.length === 0) {
-		console.log("  No profiles available.");
+	// Removable = anything present in the user overlay (incl. built-in overrides).
+	const removable = Object.keys(overlay.profiles ?? {});
+	if (removable.length === 0) {
+		console.log(
+			"  No removable profiles. (Built-ins cannot be removed; override one to change it.)",
+		);
 		return;
 	}
 
-	const name = await promptChoice(rl, "Select profile to remove:", profileNames, isCancelled);
+	const name = await promptChoice(rl, "Select profile to remove:", removable, isCancelled);
 
-	if (name === config.default) {
-		console.log(`  Cannot remove the default profile "${name}". Set a different default first.`);
-		return;
+	// Removing a user override of a built-in restores the built-in; removing a
+	// pure-user profile deletes it. Either way the effective `default` must keep
+	// resolving. Compute the post-removal effective default against the merged set.
+	const wasDefault = effectiveDefault(overlay) === name || overlay.default === name;
+	if (wasDefault) {
+		// After removal, does the current default still resolve? If the default
+		// *was* this profile, it must be re-pointed first.
+		const currentUserProfiles = overlay.profiles as Record<string, Profile>;
+		const remainingProfiles = { ...currentUserProfiles };
+		delete remainingProfiles[name];
+		const mergedAfter = mergeProfiles(remainingProfiles);
+		const defAfter = overlay.default ?? "developer";
+		if (!(defAfter in mergedAfter)) {
+			console.log(
+				`  Cannot remove "${name}": it is the effective default. Set a different default first.`,
+			);
+			return;
+		}
 	}
 
-	delete config.profiles[name];
-	console.log(`\n  Profile "${name}" removed.`);
+	if (overlay.profiles) delete overlay.profiles[name];
+	console.log(
+		`\n  Profile "${name}" removed.${isBuiltinProfile(name) ? " Built-in restored." : ""}`,
+	);
 }
 
 async function editProfile(
 	rl: Readline,
-	config: Config,
+	overlay: UserConfig,
 	isCancelled: () => boolean,
 ): Promise<void> {
-	const profileNames = Object.keys(config.profiles);
+	const merged = mergeProfiles(overlay.profiles);
+	const profileNames = Object.keys(merged);
 	if (profileNames.length === 0) {
 		console.log("  No profiles available.");
 		return;
 	}
 
 	const name = await promptChoice(rl, "Select profile to edit:", profileNames, isCancelled);
-	const profile = config.profiles[name];
+
+	// Resolve the profile to edit. A pure-user profile is edited in place. A
+	// built-in *not* yet overridden is copy-on-write: clone into the overlay,
+	// then edit the clone (so the original built-in is untouched until save).
+	if (!overlay.profiles || !(name in overlay.profiles)) {
+		// Built-in, not yet overridden → materialise an override copy.
+		const builtin = BUILTIN_PROFILES[name];
+		if (!overlay.profiles) overlay.profiles = {};
+		overlay.profiles[name] = {
+			cmd: builtin.cmd,
+			...(builtin.bundles ? { bundles: [...builtin.bundles] } : {}),
+		};
+		console.log(`\n  Materialised a user override of built-in "${name}" for editing.`);
+	}
+
+	const profiles = overlay.profiles as Record<string, Profile>;
+	const profile = profiles[name];
 
 	while (true) {
-		console.log(`\n  Editing profile: ${name}`);
+		const annotation = profileAnnotation(name, overlay);
+		console.log(`\n  Editing profile: ${name} ${annotation}`);
 		displayProfile(profile);
 		console.log("\n  1. Edit cmd");
 		console.log("  2. Edit bundles");
