@@ -9,4 +9,7 @@ export default {
 	piExtensions: [],
 	skills: [join(here, "skills", "repo-explorer")],
 	prompts: [],
+	// The repo-explorer skill uses dynamic `!` shell blocks in its SKILL.md,
+	// which only the dynamic-skills extension expands at load time.
+	dependencies: ["dynamic-skills"],
 } satisfies ExtensionBundleManifest;

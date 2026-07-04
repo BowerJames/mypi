@@ -12,7 +12,7 @@ import {
 	printRunHelp,
 } from "./help.js";
 import { writeDefaultConfig } from "./init.js";
-import { expandBundle } from "./resources.js";
+import { bundleActivationOrder, expandBundle } from "./resources.js";
 import { runPiPassthrough } from "./run.js";
 import { shellQuote, spawnShell } from "./shell.js";
 import type { Config, Profile } from "./types.js";
@@ -45,20 +45,30 @@ function initConfig(cwd: string): void {
  */
 async function buildResourceParts(profile: Profile): Promise<string[]> {
 	const parts: string[] = [];
+	// Deduplicate across the whole profile: a shared dependency (or a dep
+	// listed explicitly alongside a bundle that pulls it in transitively) is
+	// emitted exactly once. Activation order is deps-first, so a dependency's
+	// resources are always emitted before those of the bundle that needs them.
+	const emitted = new Set<string>();
 
 	for (const name of profile.bundles ?? []) {
-		const resolved = await expandBundle(name);
+		for (const activationName of await bundleActivationOrder(name)) {
+			if (emitted.has(activationName)) continue;
+			emitted.add(activationName);
 
-		for (const path of resolved.piExtensions) {
-			parts.push("-e", path);
-		}
+			const resolved = await expandBundle(activationName);
 
-		for (const path of resolved.skills) {
-			parts.push("--skill", path);
-		}
+			for (const path of resolved.piExtensions) {
+				parts.push("-e", path);
+			}
 
-		for (const path of resolved.prompts) {
-			parts.push("--prompt-template", path);
+			for (const path of resolved.skills) {
+				parts.push("--skill", path);
+			}
+
+			for (const path of resolved.prompts) {
+				parts.push("--prompt-template", path);
+			}
 		}
 	}
 

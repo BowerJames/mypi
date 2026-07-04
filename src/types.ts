@@ -13,6 +13,8 @@ export interface ExtensionBundleManifest {
 	skills: string[];
 	/** On-disk `.md` paths of the prompt templates to load via `--prompt-template`. */
 	prompts: string[];
+	/** Names of other bundles that must also be active when this one is. Resolved transitively, deps-first, deduplicated across the whole command. */
+	dependencies?: string[];
 }
 
 /** A bundle expanded to its resolved on-disk resource paths. */

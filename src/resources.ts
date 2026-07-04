@@ -130,3 +130,79 @@ export async function expandBundle(name: string): Promise<ResolvedBundle> {
 		prompts: [...manifest.prompts],
 	};
 }
+
+// ---------------------------------------------------------------------------
+// Dependency resolution (composable bundles)
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the bundle names a given bundle depends on (its direct
+ * dependencies). Used as the graph edge source for `activationOrder`. The
+ * on-disk `manifestDeps` implementation is the production resolver; tests
+ * inject a fake one (no filesystem).
+ */
+export type DependencyResolver = (name: string) => string[] | Promise<string[]>;
+
+/**
+ * Pure topological DFS: resolve a single root bundle's full transitive
+ * dependency closure, **deps-first**, deduplicated within the closure.
+ *
+ * Returns `[...transitive deps..., root]` so a dependency is always emitted
+ * before the bundle that needs it. The closure is the set of all bundles that
+ * must be active for `root` to work; callers deduplicate across multiple
+ * roots themselves (see `bundleActivationOrder`).
+ *
+ * `resolveDeps` supplies the dependency graph, so this function is pure and
+ * unit-testable without filesystem fixtures. A dependency that does not
+ * resolve is surfaced by `resolveDeps` itself (the production `manifestDeps`
+ * calls `loadBundle`, which throws "Bundle not found").
+ *
+ * Throws on a cycle (e.g. `a -> b -> a`), formatting the full offending path.
+ */
+export async function activationOrder(
+	root: string,
+	resolveDeps: DependencyResolver,
+): Promise<string[]> {
+	const visited = new Set<string>();
+	const result: string[] = [];
+
+	async function dfs(name: string, stack: string[]): Promise<void> {
+		// Cycle detection: `name` is already on the current DFS path.
+		if (stack.includes(name)) {
+			throw new Error(`Circular bundle dependency: ${[...stack, name].join(" -> ")}`);
+		}
+		// Already fully resolved in a prior branch (diamond dedup).
+		if (visited.has(name)) return;
+
+		const deps = await resolveDeps(name);
+		for (const dep of deps) {
+			await dfs(dep, [...stack, name]);
+		}
+
+		visited.add(name);
+		result.push(name);
+	}
+
+	await dfs(root, []);
+	return result;
+}
+
+/**
+ * On-disk manifest resolver — the production `DependencyResolver`. Reads a
+ * bundle's manifest via `loadBundle` (which throws "Bundle not found" for a
+ * missing name) and returns its declared dependencies (empty for none).
+ */
+async function manifestDeps(name: string): Promise<string[]> {
+	const manifest = await loadBundle(name);
+	return manifest.dependencies ?? [];
+}
+
+/**
+ * Resolve a single bundle's activation order from on-disk manifests: its full
+ * transitive dependency closure, deps-first. Production callers
+ * (`buildResourceParts`, `resolveRunArgs`) deduplicate the union across all
+ * bundles they process.
+ */
+export async function bundleActivationOrder(name: string): Promise<string[]> {
+	return activationOrder(name, manifestDeps);
+}

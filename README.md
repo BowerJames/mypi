@@ -161,9 +161,11 @@ Any additional arguments passed on the command line are appended to the command.
 - a bundle's skills → `--skill <path>`
 - a bundle's prompts → `--prompt-template <path>`
 
+A bundle may declare `dependencies`; those bundles are auto-activated and their resources are emitted **first** (dependencies before dependents), so a skill whose `SKILL.md` uses dynamic `!` blocks always has the `dynamic-skills` extension loaded by the time it expands. Dependencies are resolved transitively and **deduplicated across the whole command** — listing a dep explicitly, or two bundles sharing a dep, never double-loads an extension (which would double-register its handlers). See [Bundle dependencies](#bundle-dependencies).
+
 You control everything else (model, tools, thinking level, etc.) through the `cmd` field.
 
-Bundles live under `extension-bundles/<name>/` inside the installed package. Each bundle's `index.ts` manifest declares its resources as paths relative to itself, so they resolve wherever npm installs the package. `mypi run` applies the same expansion via `--bundle` (see [Running pi directly](#running-pi-directly-mypi-run)).
+Bundles live under `extension-bundles/<name>/` inside the installed package. Each bundle's `index.ts` manifest declares its resources as paths relative to itself, so they resolve wherever npm installs the package. A bundle may also declare `dependencies` (other bundle names); those are auto-activated alongside it — see [Bundle dependencies](#bundle-dependencies). `mypi run` applies the same expansion via `--bundle` (see [Running pi directly](#running-pi-directly-mypi-run)).
 
 ## Bundled Resources
 
@@ -178,8 +180,20 @@ mypi ships 9 **bundles**, each under `extension-bundles/<name>/`. Most contain a
 | `render-raw` | pi-extension | Append a raw (unformatted) rendering of the last assistant reply — `/render-raw` injects a custom-typed copy of the reply rendered as plain text (literal markdown), shown in the TUI but kept out of the main agent's context. Additive, not a toggle; a re-run against the same reply is a no-op |
 | `code-review` | pi-extension | Appends a "run an independent review before a PR" system-prompt section and provides `/code-review-model` to set the recommended review model (defaults to the active session model) |
 | `code-review-prompt` | prompt | Independent code review of an issue's implementation on a branch. Usage: `/code-review <issue_number> <branch_to_review> <target_branch_of_pr>` |
-| `repo-explorer` | skill | Explore third-party codebases/libraries/frameworks without cluttering the active workspace — clones into a `/tmp/repos/` cache and reuses existing checkouts |
+| `repo-explorer` | skill | Explore third-party codebases/libraries/frameworks without cluttering the active workspace — clones into a `/tmp/repos/` cache and reuses existing checkouts. Auto-activates `dynamic-skills` (its `SKILL.md` uses dynamic `!` shell blocks) |
 | `overview` | prompt | Overview of the repository, core components, and open issues |
+
+### Bundle dependencies
+
+Bundles are **composable**: a bundle's manifest may declare a `dependencies` field (a list of other bundle names). When you select a bundle — via a profile's `bundles` list or `mypi run --bundle <name>` — mypi **auto-activates its full transitive dependency closure**, so you only ever name the bundles you actually want.
+
+Resolution rules:
+
+- **Dependencies-first.** A dependency's resources are always emitted before those of the bundle that needs them. For example, selecting `repo-explorer` (a skill whose `SKILL.md` uses dynamic `!` shell blocks) auto-activates `dynamic-skills` (the extension that expands those blocks) and emits its `-e` flag first.
+- **Transitive.** If `a` depends on `b` and `b` depends on `c`, selecting `a` activates all three (`c`, then `b`, then `a`).
+- **Deduplicated across the whole command.** If two bundles share a dependency, or you list a dependency explicitly alongside a bundle that pulls it in, the shared dependency is loaded exactly once — never double-registering an extension's handlers via duplicate `-e` flags.
+- **Silent in `mypi configure`.** The editor only toggles the bundles you name; dependencies are pulled in at launch time, so you do not need to (and should not) select a dep explicitly.
+- **Fail-fast on cycles / missing bundles.** A circular dependency raises `Circular bundle dependency: a -> b -> a`; a dependency that names a non-existent bundle surfaces the standard "Bundle not found" error.
 
 ### Dynamic Skills
 
