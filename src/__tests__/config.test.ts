@@ -180,6 +180,16 @@ describe("loadUserConfig / saveConfig", () => {
 		expect(loadUserConfig(testDir)).toEqual({});
 	});
 
+	it("treats a bare `profiles:` key (parses to null) as absent — regression for mypi init output", () => {
+		// `mypi init` writes `profiles:` with only comments beneath, which YAML
+		// parses to null. Reading that back must NOT throw.
+		writeFileSync(
+			resolve(testDir, "mypi-config.yaml"),
+			"default: developer\nprofiles:\n  # custom:\n",
+		);
+		expect(loadUserConfig(testDir)).toEqual({ default: "developer" });
+	});
+
 	it("loads a valid overlay", () => {
 		writeFileSync(
 			resolve(testDir, "mypi-config.yaml"),

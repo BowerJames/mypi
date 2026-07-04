@@ -1,7 +1,7 @@
 import { stdin as input, stdout as output } from "node:process";
 import { createInterface } from "node:readline/promises";
 import { loadUserConfig, saveConfig } from "./config.js";
-import { BUILTIN_PROFILES, isBuiltinProfile, mergeProfiles } from "./profiles.js";
+import { BUILTIN_DEFAULT, BUILTIN_PROFILES, isBuiltinProfile, mergeProfiles } from "./profiles.js";
 import { discoverBundles } from "./resources.js";
 import type { Profile, UserConfig } from "./types.js";
 
@@ -216,15 +216,10 @@ function profileAnnotation(name: string, overlay: UserConfig): string {
 	return "(custom)";
 }
 
-/** Effective default resolved from overlay + built-in fallback. */
-function effectiveDefault(overlay: UserConfig): string {
-	return overlay.default ?? "developer";
-}
-
 function displayConfig(overlay: UserConfig): void {
 	const merged = mergeProfiles(overlay.profiles);
 	console.log(
-		`\n  default: ${effectiveDefault(overlay)} (set in overlay: ${overlay.default ?? "—"})`,
+		`\n  default: ${overlay.default ?? BUILTIN_DEFAULT} (set in overlay: ${overlay.default ?? "—"})`,
 	);
 	const profileNames = Object.keys(merged);
 	console.log(
@@ -400,7 +395,7 @@ async function removeProfile(
 	// Removing a user override of a built-in restores the built-in; removing a
 	// pure-user profile deletes it. Either way the effective `default` must keep
 	// resolving. Compute the post-removal effective default against the merged set.
-	const wasDefault = effectiveDefault(overlay) === name || overlay.default === name;
+	const wasDefault = (overlay.default ?? BUILTIN_DEFAULT) === name || overlay.default === name;
 	if (wasDefault) {
 		// After removal, does the current default still resolve? If the default
 		// *was* this profile, it must be re-pointed first.
@@ -408,7 +403,7 @@ async function removeProfile(
 		const remainingProfiles = { ...currentUserProfiles };
 		delete remainingProfiles[name];
 		const mergedAfter = mergeProfiles(remainingProfiles);
-		const defAfter = overlay.default ?? "developer";
+		const defAfter = overlay.default ?? BUILTIN_DEFAULT;
 		if (!(defAfter in mergedAfter)) {
 			console.log(
 				`  Cannot remove "${name}": it is the effective default. Set a different default first.`,

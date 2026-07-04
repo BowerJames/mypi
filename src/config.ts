@@ -72,6 +72,13 @@ export function validateUserConfig(raw: unknown): UserConfig {
 	}
 
 	if ("profiles" in raw) {
+		// A bare `profiles:` key (e.g. written by `mypi init` as a placeholder
+		// under commented examples) parses to `null`. Treat that as "no
+		// profiles" (absent) rather than malformed — only a non-null,
+		// non-object value is a real shape error.
+		if (raw.profiles === null) {
+			return overlay;
+		}
 		if (!isObject(raw.profiles)) {
 			throw new ConfigError('mypi-config.yaml "profiles" must be a mapping.');
 		}
