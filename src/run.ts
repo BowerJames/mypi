@@ -13,7 +13,7 @@
  * `mypi run` requires no config file and uses no profiles.
  */
 
-import { expandBundle } from "./resources.js";
+import { bundleActivationOrder, expandBundle } from "./resources.js";
 import { shellQuote, spawnShell } from "./shell.js";
 
 /** The pi flags emitted for each bundle facet, in order. */
@@ -34,22 +34,30 @@ const PI_PROMPT_FLAG = "--prompt-template";
  */
 export async function resolveRunArgs(args: string[]): Promise<string[]> {
 	const out: string[] = [];
+	// Deduplicate across the whole token stream: two `--bundle` flags sharing a
+	// dependency (or a bundle listed alongside its own dep) emit the dep once.
+	const emitted = new Set<string>();
 
 	for (let i = 0; i < args.length; i++) {
 		const token = args[i];
 		const bundleName = bundleNameFor(token, args[i + 1]);
 
 		if (bundleName !== undefined) {
-			const resolved = await expandBundle(bundleName);
+			for (const activationName of await bundleActivationOrder(bundleName)) {
+				if (emitted.has(activationName)) continue;
+				emitted.add(activationName);
 
-			for (const path of resolved.piExtensions) {
-				out.push(PI_EXTENSION_FLAG, path);
-			}
-			for (const path of resolved.skills) {
-				out.push(PI_SKILL_FLAG, path);
-			}
-			for (const path of resolved.prompts) {
-				out.push(PI_PROMPT_FLAG, path);
+				const resolved = await expandBundle(activationName);
+
+				for (const path of resolved.piExtensions) {
+					out.push(PI_EXTENSION_FLAG, path);
+				}
+				for (const path of resolved.skills) {
+					out.push(PI_SKILL_FLAG, path);
+				}
+				for (const path of resolved.prompts) {
+					out.push(PI_PROMPT_FLAG, path);
+				}
 			}
 
 			// Consume the value token too when we used the space-separated form.

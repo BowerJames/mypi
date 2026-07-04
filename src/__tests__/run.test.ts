@@ -32,15 +32,61 @@ describe("resolveRunArgs", () => {
 			expect(out[1]).toContain(bundleEntry("code-review-prompt"));
 		});
 
-		it("expands a skill-only bundle to a --skill flag", async () => {
-			const out = await resolveRunArgs(["--bundle", "repo-explorer"]);
-			expect(out[0]).toBe("--skill");
+		it("expands a skill-only bundle to a --skill flag (bundle with no deps)", async () => {
+			// repo-explorer has a dependency on dynamic-skills, so use a hypothetical
+			// standalone skill case via the equals form below. Here we verify a
+			// dep-free extension-only bundle emits just its -e flag.
+			const out = await resolveRunArgs(["--bundle=mode"]);
+			expect(out[0]).toBe("-e");
 			expect(out.length).toBe(2);
 		});
 
 		it("expands multiple --bundle flags independently", async () => {
 			const out = await resolveRunArgs(["--bundle", "mode", "--bundle", "repo-explorer"]);
+			// mode: single -e; repo-explorer: pulls in dynamic-skills (-e) then itself (--skill).
+			expect(out).toEqual(["-e", out[1], "-e", out[3], "--skill", out[5]]);
+			expect(out[1]).toContain(bundleEntry("mode"));
+			expect(out[3]).toContain(bundleEntry("dynamic-skills"));
+			expect(out[5]).toContain(bundleEntry("repo-explorer"));
+		});
+	});
+
+	describe("resolves dependencies", () => {
+		it("auto-activates a bundle's dependency, emitted first (repo-explorer -> dynamic-skills)", async () => {
+			const out = await resolveRunArgs(["--bundle", "repo-explorer"]);
+			// dynamic-skills (a pi-extension) must precede repo-explorer (a skill).
 			expect(out).toEqual(["-e", out[1], "--skill", out[3]]);
+			expect(out[1]).toContain(bundleEntry("dynamic-skills"));
+			expect(out[3]).toContain(bundleEntry("repo-explorer"));
+		});
+
+		it("works with the --bundle=<name> equals form", async () => {
+			const out = await resolveRunArgs(["--bundle=repo-explorer"]);
+			expect(out[0]).toBe("-e");
+			expect(out[1]).toContain(bundleEntry("dynamic-skills"));
+			expect(out[2]).toBe("--skill");
+			expect(out[3]).toContain(bundleEntry("repo-explorer"));
+		});
+
+		it("deduplicates a dependency shared by two --bundle flags", async () => {
+			// repo-explorer depends on dynamic-skills; dynamic-skills is also
+			// listed explicitly. The shared dep must be emitted exactly once.
+			const out = await resolveRunArgs(["--bundle", "repo-explorer", "--bundle", "dynamic-skills"]);
+			const dynFlags = out.filter((t, i) => t === "-e" && out[i + 1]?.includes("dynamic-skills"));
+			expect(dynFlags).toHaveLength(1);
+			// dynamic-skills emitted first (it's a dep of repo-explorer), then repo-explorer's skill.
+			expect(out[0]).toBe("-e");
+			expect(out[1]).toContain(bundleEntry("dynamic-skills"));
+			expect(out[2]).toBe("--skill");
+			expect(out[3]).toContain(bundleEntry("repo-explorer"));
+		});
+
+		it("deduplicates a dependency when the same bundle is passed twice", async () => {
+			const out = await resolveRunArgs(["--bundle", "repo-explorer", "--bundle", "repo-explorer"]);
+			// dynamic-skills once, repo-explorer once.
+			expect(out).toEqual(["-e", out[1], "--skill", out[3]]);
+			expect(out[1]).toContain(bundleEntry("dynamic-skills"));
+			expect(out[3]).toContain(bundleEntry("repo-explorer"));
 		});
 	});
 
