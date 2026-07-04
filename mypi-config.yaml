@@ -16,7 +16,3 @@ profiles:
     cmd: pi -p
     bundles:
       - code-review-prompt
-  review-agent-trajectory:
-    cmd: pi -p
-    bundles:
-      - review-agent-trajectory-prompt

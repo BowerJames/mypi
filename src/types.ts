@@ -28,7 +28,26 @@ export interface Profile {
 	cmd: string;
 }
 
+/**
+ * The strict, *effective* configuration shape: a required default that must
+ * reference an existing profile, and a non-empty profiles map. This is what
+ * the launcher and editor operate on after merging built-ins + the user
+ * overlay (see `loadEffectiveConfig`).
+ */
 export interface Config {
 	default: string;
 	profiles: Record<string, Profile>;
+}
+
+/**
+ * The on-disk user overlay (`mypi-config.yaml`). Both fields are optional —
+ * the file itself is optional, and a user need only set the bits they want to
+ * add or override on top of the built-in profiles (see `BUILTIN_PROFILES`).
+ * A user profile with the same name as a built-in replaces it wholesale.
+ */
+export interface UserConfig {
+	/** Profile to use when none is specified on the CLI. Falls back to `BUILTIN_DEFAULT` if unset. */
+	default?: string;
+	/** User-defined profiles, merged on top of the built-ins (user wins on name collision). */
+	profiles?: Record<string, Profile>;
 }

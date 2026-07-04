@@ -22,15 +22,14 @@ describe("writeDefaultConfig", () => {
 		expect(existsSync(resolve(testDir, "mypi-config.yaml"))).toBe(true);
 	});
 
-	it("writes valid YAML with the expected structure", () => {
+	it("writes a starter overlay (default: developer, no built-ins serialised)", () => {
 		writeDefaultConfig(testDir);
 		const raw = readFileSync(resolve(testDir, "mypi-config.yaml"), "utf-8");
 		const config = yaml.load(raw) as Record<string, unknown>;
 
-		expect(config.default).toBe("default");
-		expect(config.profiles).toEqual({
-			default: { cmd: "pi" },
-		});
+		expect(config.default).toBe("developer");
+		// Starter overlay carries no built-in profiles — those ship in code.
+		expect(config.profiles).toBeNull(); // 'profiles:' with no body
 	});
 
 	it("writes the exact expected content", () => {

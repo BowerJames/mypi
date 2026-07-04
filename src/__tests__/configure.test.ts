@@ -52,8 +52,6 @@ describe("discoverBundles", () => {
 		expect(bundles).toContain("render-raw");
 		expect(bundles).toContain("code-review");
 		expect(bundles).toContain("code-review-prompt");
-		expect(bundles).toContain("review-agent-trajectory");
-		expect(bundles).toContain("review-agent-trajectory-prompt");
 		expect(bundles).toContain("repo-explorer");
 		expect(bundles).toContain("overview");
 	});

@@ -45,13 +45,17 @@ Notes:
 
 ## Setup
 
-1. Create a default config:
+mypi works out of the box with **no config** — built-in profiles
+(`developer`, `reviewer`) are always available. To add or override profiles,
+create a config:
 
 ```bash
 mypi init
 ```
 
-2. Edit `mypi-config.yaml` to define your profiles (or use `mypi configure` for an interactive editor).
+This writes a starter `mypi-config.yaml` overlay. Edit it to define your own
+profiles (or use `mypi configure` for an interactive editor). A user profile
+with the same name as a built-in **replaces** it.
 
 ## Usage
 
@@ -107,7 +111,17 @@ mypi run --help
 
 ## Configuration
 
-Create a `mypi-config.yaml` in your project root:
+mypi ships built-in profiles and **works with no config file at all**. The
+optional `mypi-config.yaml` is an **overlay** that adds new profiles,
+overrides built-ins by name (replace), and optionally sets `default`. If you
+just want to tweak things, create one:
+
+```bash
+mypi init        # writes a starter overlay
+```
+
+Example overlay adding a custom `fullstack` profile (the built-ins
+`developer` and `reviewer` remain available alongside it):
 
 ```yaml
 default: fullstack
@@ -122,12 +136,10 @@ profiles:
       - repo-explorer          # explore third-party codebases into a /tmp cache
       - overview               # repo overview and open issues
     cmd: "pi --model claude-sonnet-4-20250514 --tools read,bash,edit,write,grep,find,ls"
-
-  reviewer:
-    bundles:
-      - code-review-prompt     # the review prompt only (no extension)
-    cmd: "pi --model claude-sonnet-4-20250514 --tools read,grep,find,ls"
 ```
+
+To override a built-in instead of adding a new name, define a profile with a
+built-in name (e.g. `developer:`) — your definition replaces it wholesale.
 
 A **bundle** is a single unit that packages related pi-extensions, skills, and prompts together, loaded by one name. See [Bundled Resources](#bundled-resources) for the full list.
 
@@ -135,7 +147,7 @@ A **bundle** is a single unit that packages related pi-extensions, skills, and p
 
 | Field | Description |
 |-------|-------------|
-| `default` | Required profile to use when none is specified |
+| `default` | Profile to use when none is specified on the CLI. Optional — falls back to the `developer` built-in if unset or if the config file is absent. |
 | `profiles.<name>.bundles` | List of bundle names from mypi's library |
 | `profiles.<name>.cmd` | Base pi command to execute. Bundle resources are injected automatically. |
 
@@ -153,11 +165,9 @@ You control everything else (model, tools, thinking level, etc.) through the `cm
 
 Bundles live under `extension-bundles/<name>/` inside the installed package. Each bundle's `index.ts` manifest declares its resources as paths relative to itself, so they resolve wherever npm installs the package. `mypi run` applies the same expansion via `--bundle` (see [Running pi directly](#running-pi-directly-mypi-run)).
 
-Some bundles are designed to work together. For example, the `review-agent-trajectory` bundle (a pi-extension) shells out to `mypi --profile review-agent-trajectory "/review-agent-trajectory <transcript>"`, so the target profile loads the separate `review-agent-trajectory-prompt` bundle (prompt only) rather than the extension bundle itself — otherwise the command would re-register itself.
-
 ## Bundled Resources
 
-mypi ships 11 **bundles**, each under `extension-bundles/<name>/`. Most contain a single resource type; the `code-review` and `review-agent-trajectory` features split into an extension bundle and a prompt-only bundle (the prompt must be loadable without the extension for the review subprocess).
+mypi ships 9 **bundles**, each under `extension-bundles/<name>/`. Most contain a single resource type; the `code-review` feature splits into an extension bundle and a prompt-only bundle (the prompt must be loadable without the extension for the review subprocess).
 
 | Bundle | Contains | Description |
 |--------|----------|-------------|
@@ -168,8 +178,6 @@ mypi ships 11 **bundles**, each under `extension-bundles/<name>/`. Most contain 
 | `render-raw` | pi-extension | Append a raw (unformatted) rendering of the last assistant reply — `/render-raw` injects a custom-typed copy of the reply rendered as plain text (literal markdown), shown in the TUI but kept out of the main agent's context. Additive, not a toggle; a re-run against the same reply is a no-op |
 | `code-review` | pi-extension | Appends a "run an independent review before a PR" system-prompt section and provides `/code-review-model` to set the recommended review model (defaults to the active session model) |
 | `code-review-prompt` | prompt | Independent code review of an issue's implementation on a branch. Usage: `/code-review <issue_number> <branch_to_review> <target_branch_of_pr>` |
-| `review-agent-trajectory` | pi-extension | Session trajectory review command — captures the current conversation and launches a review pass |
-| `review-agent-trajectory-prompt` | prompt | Review a full agent session transcript for skill gaps, improvements, and missing guidance |
 | `repo-explorer` | skill | Explore third-party codebases/libraries/frameworks without cluttering the active workspace — clones into a `/tmp/repos/` cache and reuses existing checkouts |
 | `overview` | prompt | Overview of the repository, core components, and open issues |
 
