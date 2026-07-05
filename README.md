@@ -121,7 +121,7 @@ mypi init        # writes a starter overlay
 ```
 
 Example overlay adding a custom `fullstack` profile (the built-ins
-`developer` and `reviewer` remain available alongside it):
+`developer`, `reviewer`, and `llm-wiki` remain available alongside it):
 
 ```yaml
 default: fullstack
@@ -375,7 +375,7 @@ the agent always knows the format *and* the specific wiki's purpose.
 | `/wiki-lint` | Inject the lint workflow guidance (one-off message) |
 
 A typical first run: `mypi --profile llm-wiki`, then `/wiki-init`, open the
-seeded spec and describe what the wiki is for, then `/wiki-ingest` and start
+empty spec and describe what the wiki is for, then `/wiki-ingest` and start
 adding sources. A `📚 wiki: <root>` indicator is shown in the footer while a
 wiki-root is active.
 

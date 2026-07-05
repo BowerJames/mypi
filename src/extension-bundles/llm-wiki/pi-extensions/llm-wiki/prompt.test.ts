@@ -45,6 +45,22 @@ describe("buildWikiManagerPromptSuffix — structure", () => {
 });
 
 describe("buildWikiManagerPromptSuffix — spec branches", () => {
+	it("reports no spec configured when specAbsPath is undefined (spec cleared)", () => {
+		const out = buildWikiManagerPromptSuffix({
+			...baseInput,
+			specAbsPath: undefined,
+			specExists: false,
+			specContents: undefined,
+		});
+		expect(out).toContain("Wiki Purpose & Conventions");
+		expect(out).toContain("No wiki spec is configured");
+		expect(out).toContain("/wiki-spec <path>");
+		expect(out).toContain("/wiki-init");
+		// Must NOT claim the wiki is uninitialised or reference a path.
+		expect(out).not.toContain("not yet initialised");
+		expect(out).not.toContain(baseInput.specAbsPath);
+	});
+
 	it("guides toward /wiki-init when the spec is missing", () => {
 		const out = buildWikiManagerPromptSuffix({
 			...baseInput,

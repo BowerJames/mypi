@@ -70,15 +70,26 @@ Report findings as a prioritised list, then propose fixes (and the new questions
 /**
  * Resolve the effective wiki-spec to its absolute path + on-disk contents.
  *
- * `spec` is the configured value (or null). Missing/empty file → `specExists`
- * false, `specContents` undefined. Never throws for a missing file.
+ * `spec` is the configured value (or null). `fallback` supplies the value to
+ * use when `spec` is null/empty — pass `/SPEC.md` for paths that need a
+ * concrete target (e.g. `/wiki-init` creating the file), or `null` to signal
+ * "no spec configured" (e.g. the prompt-injection path, which must honour an
+ * explicit `/wiki-spec` clear rather than silently reading the default).
+ *
+ * When `spec` is null/empty AND `fallback` is null, `specAbsPath` is
+ * `undefined`. Missing/empty file → `specExists` false, `specContents`
+ * undefined. Never throws for a missing file.
  */
 function resolveSpecOnDisk(
 	cwd: string,
 	wikiRootAbs: string,
 	spec: string | null,
-): { specAbsPath: string; specExists: boolean; specContents: string | undefined } {
-	const specValue = spec && spec.length > 0 ? spec : "/SPEC.md";
+	fallback: string | null,
+): { specAbsPath: string | undefined; specExists: boolean; specContents: string | undefined } {
+	const specValue = spec && spec.length > 0 ? spec : fallback;
+	if (specValue === null) {
+		return { specAbsPath: undefined, specExists: false, specContents: undefined };
+	}
 	const specAbsPath = resolveWikiSpec(cwd, wikiRootAbs, specValue);
 	try {
 		const contents = readFileSync(specAbsPath, "utf-8");
@@ -149,9 +160,21 @@ export default function llmWikiExtension(pi: ExtensionAPI): void {
 	pi.registerCommand("wiki-init", {
 		description: "Scaffold the wiki-root and create empty index.md, log.md, and the wiki-spec",
 		handler: async (_args, ctx) => {
-			const rootValue = wikiRoot ?? displayRoot(wikiRoot);
+			if (!wikiRoot) {
+				ctx.ui.notify(
+					"No wiki-root set. Use `/wiki-root <path>` first (a prior clear was sticky).",
+					"warning",
+				);
+				return;
+			}
+
+			const rootValue = wikiRoot;
 			const wikiRootAbs = resolveWikiRoot(ctx.cwd, rootValue);
-			const { specAbsPath } = resolveSpecOnDisk(ctx.cwd, wikiRootAbs, wikiSpec);
+			// /wiki-init needs a concrete spec path to create; fall back to the default
+			// (unlike the prompt path, an explicit /wiki-spec clear is NOT honoured
+			// here — init must have somewhere to write).
+			const specValue = wikiSpec && wikiSpec.length > 0 ? wikiSpec : "/SPEC.md";
+			const specAbsPath = resolveWikiSpec(ctx.cwd, wikiRootAbs, specValue);
 
 			const result = bootstrapWiki(wikiRootAbs, specAbsPath);
 
@@ -166,14 +189,20 @@ export default function llmWikiExtension(pi: ExtensionAPI): void {
 				ctx.ui.notify(`Wiki already initialised at ${rootValue}/ (all assets present)`, "info");
 			}
 
-			pi.sendMessage({
-				customType: "wiki-init-context",
-				content:
-					`Wiki initialised at \`${rootValue}/\`. The spec is at \`${specAbsPath}\` (empty). ` +
-					`Open the spec and describe what this wiki is for — its purpose, the page types and ` +
-					`conventions you want — before ingesting any sources. Then use \`/wiki-ingest\` to begin.`,
-				display: true,
-			});
+			// Re-read the spec after bootstrap so the follow-up reflects its real
+			// state (it may have pre-existed with content from a prior session).
+			const after = resolveSpecOnDisk(ctx.cwd, wikiRootAbs, wikiSpec, "/SPEC.md");
+			const specContents = after.specContents ?? "";
+			const specEmpty = specContents.trim().length === 0;
+
+			const content = specEmpty
+				? `Wiki initialised at \`${rootValue}/\`. The spec at \`${specAbsPath}\` is empty. ` +
+					`Open it and describe what this wiki is for — its purpose, the page types and ` +
+					`conventions you want — before ingesting any sources. Then use \`/wiki-ingest\` to begin.`
+				: `Wiki initialised at \`${rootValue}/\`. The spec at \`${specAbsPath}\` already has content — ` +
+					`review it, then use \`/wiki-ingest\` to begin.`;
+
+			pi.sendMessage({ customType: "wiki-init-context", content, display: true });
 		},
 	});
 
@@ -218,10 +247,13 @@ export default function llmWikiExtension(pi: ExtensionAPI): void {
 		if (!wikiRoot) return; // cleared: do not engage wiki-manager behaviour
 
 		const wikiRootAbs = resolveWikiRoot(ctx.cwd, wikiRoot);
+		// No fallback: when wikiSpec is cleared (null), the prompt reports no spec
+		// is configured rather than silently reading the default /SPEC.md.
 		const { specAbsPath, specExists, specContents } = resolveSpecOnDisk(
 			ctx.cwd,
 			wikiRootAbs,
 			wikiSpec,
+			null,
 		);
 
 		const suffix = buildWikiManagerPromptSuffix({

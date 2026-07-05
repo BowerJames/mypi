@@ -16,9 +16,9 @@
 export interface WikiPromptInput {
 	/** User-facing relative form of the wiki-root (e.g. `wiki` or a custom value). */
 	wikiRootDisplay: string;
-	/** Absolute path to the wiki-spec file (for error/guidance messages). */
-	specAbsPath: string;
-	/** Whether the wiki-spec file exists on disk. */
+	/** Absolute path to the wiki-spec file. `undefined` when no spec is configured (user cleared it). */
+	specAbsPath: string | undefined;
+	/** Whether the wiki-spec file exists on disk (only meaningful when `specAbsPath` is defined). */
 	specExists: boolean;
 	/** Raw contents of the wiki-spec file when it exists (may be empty). */
 	specContents: string | undefined;
@@ -70,14 +70,27 @@ Keep cross-references current, note where new data contradicts old claims, and n
 /**
  * Build the "Wiki Purpose & Conventions" section from the wiki-spec file.
  *
- * Three branches:
- * - **missing** → tell the agent the wiki is uninitialised and how to bootstrap.
- * - **empty** (0 bytes) → tell the agent the spec exists but is unpopulated; it
+ * Four branches:
+ * - **none configured** → no spec path (user cleared `/wiki-spec`); tell the
+ *   agent no spec is set and how to configure one.
+ * - **missing** → a spec path is set but the file does not exist; tell the
+ *   agent the wiki is uninitialised and how to bootstrap.
+ * - **empty** (0 bytes / whitespace) → the spec exists but is unpopulated; it
  *   must be filled in before any wiki work is meaningful.
  * - **populated** → inject the spec contents verbatim.
  */
 function buildPurposeSection(input: WikiPromptInput): string {
 	const header = "### Wiki Purpose & Conventions";
+
+	if (!input.specAbsPath) {
+		return (
+			`${header}\n\n` +
+			`No wiki spec is configured. The spec is the per-wiki purpose & conventions doc ` +
+			`that tells you *which* wiki you are managing. Set one with \`/wiki-spec <path>\` ` +
+			`(a leading slash is wiki-root-relative), or run \`/wiki-init\` to scaffold an ` +
+			`empty spec at the default location (\`/SPEC.md\`).`
+		);
+	}
 
 	if (!input.specExists) {
 		return (
