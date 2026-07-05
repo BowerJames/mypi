@@ -31,7 +31,7 @@ OPTIONS
   --profile <name>   Use the named profile (default from config, else 'developer')
   -h, --help         Show help
 
-Built-in profiles (developer, reviewer) are always available with no
+Built-in profiles (developer, reviewer, llm-wiki) are always available with no
 mypi-config.yaml. The config file is an optional overlay: add/override
 profiles and optionally set 'default'. Run 'mypi configure' to edit it.
 

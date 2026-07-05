@@ -9,8 +9,8 @@ import {
 import type { Profile } from "../types.js";
 
 describe("BUILTIN_PROFILES", () => {
-	it("ships exactly the developer and reviewer profiles", () => {
-		expect(Object.keys(BUILTIN_PROFILES).sort()).toEqual(["developer", "reviewer"]);
+	it("ships exactly the developer, llm-wiki, and reviewer profiles", () => {
+		expect(Object.keys(BUILTIN_PROFILES).sort()).toEqual(["developer", "llm-wiki", "reviewer"]);
 	});
 
 	it("developer matches the repo's prior default profile (model-less)", () => {
@@ -31,6 +31,11 @@ describe("BUILTIN_PROFILES", () => {
 		expect(BUILTIN_PROFILES.reviewer.cmd).toBe("pi -p");
 		expect(BUILTIN_PROFILES.reviewer.bundles).toEqual(["code-review-prompt"]);
 	});
+
+	it("llm-wiki is a model-less wiki-manager profile", () => {
+		expect(BUILTIN_PROFILES["llm-wiki"].cmd).toBe("pi");
+		expect(BUILTIN_PROFILES["llm-wiki"].bundles).toEqual(["llm-wiki"]);
+	});
 });
 
 describe("BUILTIN_DEFAULT", () => {
@@ -44,6 +49,7 @@ describe("isBuiltinProfile", () => {
 	it("returns true for built-in names", () => {
 		expect(isBuiltinProfile("developer")).toBe(true);
 		expect(isBuiltinProfile("reviewer")).toBe(true);
+		expect(isBuiltinProfile("llm-wiki")).toBe(true);
 	});
 
 	it("returns false for user-only names", () => {
@@ -55,7 +61,7 @@ describe("isBuiltinProfile", () => {
 describe("mergeProfiles", () => {
 	it("returns the built-ins when no overlay is provided", () => {
 		const merged = mergeProfiles(undefined);
-		expect(Object.keys(merged).sort()).toEqual(["developer", "reviewer"]);
+		expect(Object.keys(merged).sort()).toEqual(["developer", "llm-wiki", "reviewer"]);
 		expect(merged.developer).toEqual(BUILTIN_PROFILES.developer);
 	});
 

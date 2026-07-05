@@ -41,6 +41,10 @@ export const BUILTIN_PROFILES: Record<string, Profile> = {
 		cmd: "pi -p",
 		bundles: ["code-review-prompt"],
 	},
+	"llm-wiki": {
+		cmd: "pi",
+		bundles: ["llm-wiki"],
+	},
 };
 
 /** True when `name` is one of the built-in profile names. */
