@@ -46,7 +46,7 @@ Notes:
 ## Setup
 
 mypi works out of the box with **no config** — built-in profiles
-(`developer`, `reviewer`) are always available. To add or override profiles,
+(`developer`, `reviewer`, `llm-wiki`) are always available. To add or override profiles,
 create a config:
 
 ```bash
@@ -121,7 +121,7 @@ mypi init        # writes a starter overlay
 ```
 
 Example overlay adding a custom `fullstack` profile (the built-ins
-`developer` and `reviewer` remain available alongside it):
+`developer`, `reviewer`, and `llm-wiki` remain available alongside it):
 
 ```yaml
 default: fullstack
@@ -169,7 +169,7 @@ Bundles live under `extension-bundles/<name>/` inside the installed package. Eac
 
 ## Bundled Resources
 
-mypi ships 9 **bundles**, each under `extension-bundles/<name>/`. Most contain a single resource type; the `code-review` feature splits into an extension bundle and a prompt-only bundle (the prompt must be loadable without the extension for the review subprocess).
+mypi ships 10 **bundles**, each under `extension-bundles/<name>/`. Most contain a single resource type; the `code-review` feature splits into an extension bundle and a prompt-only bundle (the prompt must be loadable without the extension for the review subprocess).
 
 | Bundle | Contains | Description |
 |--------|----------|-------------|
@@ -182,6 +182,7 @@ mypi ships 9 **bundles**, each under `extension-bundles/<name>/`. Most contain a
 | `code-review-prompt` | prompt | Independent code review of an issue's implementation on a branch. Usage: `/code-review <issue_number> <branch_to_review> <target_branch_of_pr>` |
 | `repo-explorer` | skill | Explore third-party codebases/libraries/frameworks without cluttering the active workspace — clones into a `/tmp/repos/` cache and reuses existing checkouts. Auto-activates `dynamic-skills` (its `SKILL.md` uses dynamic `!` shell blocks) |
 | `overview` | prompt | Overview of the repository, core components, and open issues |
+| `llm-wiki` | pi-extension | Turn the agent into a wiki manager for an [OKF](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) wiki (Karpathy's [LLM-wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)) — `/wiki-root`/`/wiki-spec` configure the bundle root and per-wiki spec doc (defaults `wiki/` and `/SPEC.md`), the spec is **auto-injected** into the system prompt each turn, `/wiki-init` scaffolds empty assets, and `/wiki-ingest`/`/wiki-query`/`/wiki-lint` inject the operating-model guidance |
 
 ### Bundle dependencies
 
@@ -326,6 +327,61 @@ It exists because pi renders every assistant text block through its built-in `Ma
 **Dedupe.** `SessionManager` exposes no entry removal, so a naive toggle would stack duplicate raw copies. Instead, `/render-raw` only appends a new copy when the last assistant reply's text differs from the one already rendered (tracked in memory and reconstructed from the session on `/reload`, `/resume`, `/new`). Re-running `/render-raw` for the same reply notifies "last reply is already rendered raw" instead of duplicating; after a new reply it renders again.
 
 Enable it by adding `render-raw` to a profile's `bundles` list.
+
+### LLM Wiki
+
+The `llm-wiki` extension turns the agent into a **wiki manager** for an
+[Open Knowledge Format (OKF) v0.1](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md)
+wiki, following Karpathy's [LLM-wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f):
+the agent incrementally builds and maintains a persistent, interlinked
+markdown knowledge base — you curate sources and ask questions; it does all
+the summarising, cross-referencing, and bookkeeping that makes a knowledge
+base compound over time.
+
+A built-in `llm-wiki` profile ships with the bundle enabled:
+
+```bash
+mypi --profile llm-wiki
+mypi run --bundle llm-wiki   # ad hoc, no profile/config needed
+```
+
+**Two configurable values** (set via slash commands, persisted across
+sessions, restored on resume):
+
+| Value | Default | Meaning |
+|-------|---------|---------|
+| `wiki-root` | `wiki` (project-relative) | The OKF bundle root — a directory tree of markdown concept files with YAML frontmatter, `index.md`/`log.md`, and cross-links |
+| `wiki-spec` | `/SPEC.md` (wiki-root-relative, OKF §5.1) | A per-wiki **purpose & conventions** doc — the runtime context that tells the agent *which* wiki it is managing (Karpathy's "schema" layer) |
+
+Both auto-default on the first session start (write-once, sticky across
+resume); an explicit clear is also sticky and suppresses the default.
+
+**Auto-injection.** Each turn the extension reads `<wiki-spec>` and appends a
+`## Wiki Manager` section to the system prompt containing: the OKF format
+essentials (required `type` frontmatter, reserved filenames, leading-`/`
+bundle-relative links, `# Schema`/`# Examples`/`# Citations` conventions),
+the ingest/query/lint operating model, and the spec's contents verbatim. So
+the agent always knows the format *and* the specific wiki's purpose.
+
+**Commands:**
+
+| Command | Purpose |
+|---------|---------|
+| `/wiki-root [<path>]` | Set the wiki-root (no arg clears; re-defaults to `wiki`) |
+| `/wiki-spec [<path>]` | Set the wiki-spec path (no arg clears; re-defaults to `/SPEC.md`) |
+| `/wiki-init` | Scaffold the wiki-root and create **empty** `index.md`, `log.md`, and the spec (idempotent; creates assets only — no seeded content) |
+| `/wiki-ingest` | Inject the ingest workflow guidance (one-off message) |
+| `/wiki-query` | Inject the query workflow guidance (one-off message) |
+| `/wiki-lint` | Inject the lint workflow guidance (one-off message) |
+
+A typical first run: `mypi --profile llm-wiki`, then `/wiki-init`, open the
+empty spec and describe what the wiki is for, then `/wiki-ingest` and start
+adding sources. A `📚 wiki: <root>` indicator is shown in the footer while a
+wiki-root is active.
+
+The agent maintains the wiki with its **built-in** tools (`read`/`write`/
+`edit`/`bash`); the extension supplies only the operating context and the
+bootstrap/config commands. It has no bundle dependencies.
 
 ## Development
 

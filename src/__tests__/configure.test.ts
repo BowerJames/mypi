@@ -54,6 +54,7 @@ describe("discoverBundles", () => {
 		expect(bundles).toContain("code-review-prompt");
 		expect(bundles).toContain("repo-explorer");
 		expect(bundles).toContain("overview");
+		expect(bundles).toContain("llm-wiki");
 	});
 
 	it("returns a sorted array", () => {
