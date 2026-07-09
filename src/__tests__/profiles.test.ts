@@ -34,7 +34,7 @@ describe("BUILTIN_PROFILES", () => {
 
 	it("llm-wiki is a model-less wiki-manager profile", () => {
 		expect(BUILTIN_PROFILES["llm-wiki"].cmd).toBe("pi");
-		expect(BUILTIN_PROFILES["llm-wiki"].bundles).toEqual(["llm-wiki"]);
+		expect(BUILTIN_PROFILES["llm-wiki"].bundles).toEqual(["llm-wiki", "mode", "repo-explorer"]);
 	});
 });
 
