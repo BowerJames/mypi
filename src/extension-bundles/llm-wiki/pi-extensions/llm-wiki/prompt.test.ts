@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildWikiManagerPromptSuffix } from "./prompt.js";
+import { buildWikiManagerPromptSuffix, OKF_SPEC_RAW_URL } from "./prompt.js";
 
 const baseInput = {
 	wikiRootDisplay: "wiki",
@@ -41,6 +41,42 @@ describe("buildWikiManagerPromptSuffix — structure", () => {
 
 	it("starts with a double newline for clean appending", () => {
 		expect(buildWikiManagerPromptSuffix(baseInput)?.startsWith("\n\n")).toBe(true);
+	});
+});
+
+describe("buildWikiManagerPromptSuffix — read-the-spec-first directive", () => {
+	it("includes a 'Read the OKF spec first' section", () => {
+		const out = buildWikiManagerPromptSuffix(baseInput);
+		expect(out).toContain("### Read the OKF spec first");
+	});
+
+	it("tells the agent to fetch the raw OKF spec once per session via curl", () => {
+		const out = buildWikiManagerPromptSuffix(baseInput);
+		expect(out).toContain(OKF_SPEC_RAW_URL);
+		expect(out).toContain("curl -fsSL");
+		expect(out).toContain("once per session");
+	});
+
+	it("self-gates: do not re-fetch if the spec is already in context", () => {
+		const out = buildWikiManagerPromptSuffix(baseInput);
+		expect(out).toContain("do NOT fetch it again");
+	});
+
+	it("instructs the agent to stop and inform the user on fetch failure", () => {
+		const out = buildWikiManagerPromptSuffix(baseInput);
+		expect(out).toContain("STOP");
+		expect(out).toContain("blocked");
+		expect(out).toContain("Do not fall back to the summary");
+	});
+
+	it("places the directive before the OKF format quick-reference summary", () => {
+		const out = buildWikiManagerPromptSuffix(baseInput);
+		expect(out).toBeDefined();
+		const text = out ?? "";
+		const directiveIdx = text.indexOf("### Read the OKF spec first");
+		const summaryIdx = text.indexOf("### OKF format (v0.1)");
+		expect(directiveIdx).toBeGreaterThanOrEqual(0);
+		expect(summaryIdx).toBeGreaterThan(directiveIdx);
 	});
 });
 
