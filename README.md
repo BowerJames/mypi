@@ -338,7 +338,9 @@ markdown knowledge base — you curate sources and ask questions; it does all
 the summarising, cross-referencing, and bookkeeping that makes a knowledge
 base compound over time.
 
-A built-in `llm-wiki` profile ships with the bundle enabled:
+A built-in `llm-wiki` profile ships with the wiki bundle enabled, plus the
+`mode` and `repo-explorer` bundles (the latter pulls in `dynamic-skills`
+automatically as a dependency):
 
 ```bash
 mypi --profile llm-wiki

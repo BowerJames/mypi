@@ -43,7 +43,7 @@ export const BUILTIN_PROFILES: Record<string, Profile> = {
 	},
 	"llm-wiki": {
 		cmd: "pi",
-		bundles: ["llm-wiki"],
+		bundles: ["llm-wiki", "mode", "repo-explorer"],
 	},
 };
 
