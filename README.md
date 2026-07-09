@@ -359,7 +359,11 @@ Both auto-default on the first session start (write-once, sticky across
 resume); an explicit clear is also sticky and suppresses the default.
 
 **Auto-injection.** Each turn the extension reads `<wiki-spec>` and appends a
-`## Wiki Manager` section to the system prompt containing: the OKF format
+`## Wiki Manager` section to the system prompt that first directs the agent to
+**read the full [OKF v0.1 spec](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md)**
+once per session (fetching it via `curl` before any other wiki work, and
+**stopping to inform the user** if it cannot be retrieved — wiki work is
+blocked until the spec can be read). The section then carries: the OKF format
 essentials (required `type` frontmatter, reserved filenames, leading-`/`
 bundle-relative links, `# Schema`/`# Examples`/`# Citations` conventions),
 the ingest/query/lint operating model, and the spec's contents verbatim. So
