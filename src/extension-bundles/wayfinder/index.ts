@@ -6,7 +6,8 @@
  * the repo's issue tracker, and resolve them one at a time until the way to
  * the destination is clear.
  *
- * Three commands (each a one-shot doctrine injector):
+ * Three commands (each a one-shot doctrine injector that clears the
+ * conversation first, so the doctrine is the agent's entire frame):
  *   /wayfinder              — grill the destination, then create the map and
  *                             the primitive tickets for the frontier.
  *   /wayfinder <ticket-ref> — point this session at a ticket; the model

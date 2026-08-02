@@ -18,8 +18,11 @@
  *   /to-spec <map-ref>      — convert a *closed* wayfinder map into a
  *                             `wayfinder:spec` successor issue (PRD hand-off).
  *
- * All three commands are one-shot doctrine injectors (`pi.sendMessage`) — there is
- * no persisted session state, no per-turn system-prompt suffix, and no footer.
+ * All three commands are one-shot doctrine injectors that **clear the
+ * conversation first** (`deliverDoctrine` → `ctx.newSession`), so the doctrine
+ * is the agent's entire frame on a clean slate. There is no persisted session
+ * state, no per-turn system-prompt suffix, and no footer. When the agent is
+ * mid-stream, each command refuses and warns the user to wait and re-run.
  * The tracker is environment-derived (autodetected from the `origin` remote,
  * with a `cwd/.mypi/wayfinder-tracker.sh` override) and memoised per session.
  *
@@ -28,6 +31,7 @@
 
 import { existsSync } from "node:fs";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { deliverDoctrine } from "./deliver.js";
 import { repoSlug, trackerScriptPath } from "./paths.js";
 import { buildChartDoctrine, buildSpecDoctrine, buildTicketDoctrine } from "./prompt.js";
 import { detectTracker, type TrackerEnv, type TrackerKind } from "./tracker.js";
@@ -79,33 +83,19 @@ export default function wayfinderExtension(pi: ExtensionAPI): void {
 
 			ctx.ui.notify(`Wayfinder tracker: ${tracker}`, "info");
 
-			// Each command path emits exactly one doctrine message, so both carry
-			// the turn trigger (the "final message only" carry-forward rule). When
-			// idle, `triggerTurn` starts the agent on the doctrine; when already
-			// streaming, the doctrine is parked as `nextTurn` context and injected
-			// at the start of the next user-initiated turn — never a mid-flight
-			// `steer` of an unrelated turn, nor `followUp` (which would auto-fire
-			// with no input).
-			const idle = ctx.isIdle();
-
+			// The doctrine is a plain string built BEFORE the clear (it carries
+			// cleanly into the fresh session). `deliverDoctrine` centralises the
+			// clear-then-inject: it refuses while busy, else starts a new session
+			// (linked to this one via `parentSession`) and fires the doctrine as
+			// the sole message with `triggerTurn`.
 			if (ticketRef) {
-				pi.sendMessage(
-					{
-						customType: "wayfinder-ticket",
-						content: buildTicketDoctrine({ tracker, repo, ticketRef }),
-						display: true,
-					},
-					{ triggerTurn: idle, deliverAs: idle ? undefined : "nextTurn" },
+				await deliverDoctrine(
+					ctx,
+					"wayfinder-ticket",
+					buildTicketDoctrine({ tracker, repo, ticketRef }),
 				);
 			} else {
-				pi.sendMessage(
-					{
-						customType: "wayfinder-chart",
-						content: buildChartDoctrine({ tracker, repo }),
-						display: true,
-					},
-					{ triggerTurn: idle, deliverAs: idle ? undefined : "nextTurn" },
-				);
+				await deliverDoctrine(ctx, "wayfinder-chart", buildChartDoctrine({ tracker, repo }));
 			}
 		},
 	});
@@ -113,8 +103,8 @@ export default function wayfinderExtension(pi: ExtensionAPI): void {
 	// `/to-spec <map-ref>`: convert a closed wayfinder map into a spec issue.
 	// A second one-shot doctrine injector in the same bundle, kept distinct
 	// from `/wayfinder` (which works a single ticket): the spec stage consumes
-	// a whole map. Same carry-forward rule as the wayfinder command:
-	// `triggerTurn` only when idle, else `nextTurn`.
+	// a whole map. Same clear-then-inject as `/wayfinder` (refuses while busy,
+	// else clears and fires the doctrine as the sole message).
 	pi.registerCommand("to-spec", {
 		description: "Convert a closed wayfinder map into a wayfinder:spec issue (/to-spec <map-ref>)",
 		handler: async (args, ctx) => {
@@ -132,16 +122,7 @@ export default function wayfinderExtension(pi: ExtensionAPI): void {
 				return;
 			}
 
-			const idle = ctx.isIdle();
-
-			pi.sendMessage(
-				{
-					customType: "wayfinder-spec",
-					content: buildSpecDoctrine({ tracker, repo, mapRef }),
-					display: true,
-				},
-				{ triggerTurn: idle, deliverAs: idle ? undefined : "nextTurn" },
-			);
+			await deliverDoctrine(ctx, "wayfinder-spec", buildSpecDoctrine({ tracker, repo, mapRef }));
 		},
 	});
 }

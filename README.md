@@ -411,7 +411,11 @@ mypi run --bundle wayfinder   # ad hoc, no profile/config needed
 ```
 
 **Commands** (all three one-shot doctrine injectors — no persisted state, no
-per-turn system-prompt suffix, no footer):
+per-turn system-prompt suffix, no footer). Each **clears the conversation
+first** so its doctrine is the agent's entire frame on a clean slate — the
+prior conversation is preserved as the parent session (recoverable via
+`/resume`). If the agent is mid-stream, the command **refuses** and asks you to
+wait and re-run once idle:
 
 | Command | Purpose |
 |---------|---------|
