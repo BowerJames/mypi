@@ -35,6 +35,14 @@ describe("parseTrackerFromRemoteUrl", () => {
 		expect(parseTrackerFromRemoteUrl("git@gitlab.corp.example:owner/repo.git")).toBe("local");
 	});
 
+	it("does not match look-alike hosts (host-anchored)", () => {
+		expect(parseTrackerFromRemoteUrl("https://notgithub.com/owner/repo.git")).toBe("local");
+		expect(parseTrackerFromRemoteUrl("https://github.com.evil.example/owner/repo.git")).toBe(
+			"local",
+		);
+		expect(parseTrackerFromRemoteUrl("git@fakegitlab.com:owner/repo.git")).toBe("local");
+	});
+
 	it("falls back to local for an empty string", () => {
 		expect(parseTrackerFromRemoteUrl("")).toBe("local");
 	});

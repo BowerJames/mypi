@@ -26,7 +26,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 
 export default {
 	name: "wayfinder",
-	piExtensions: [join(here, "pi-extensions", "wayfinder")],
+	piExtensions: [join(here, "pi-extensions", "wayfinder", "index.ts")],
 	skills: [],
 	prompts: [],
 } satisfies ExtensionBundleManifest;

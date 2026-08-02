@@ -47,8 +47,13 @@ export interface TrackerEnv {
  * host heuristics.
  */
 export function parseTrackerFromRemoteUrl(url: string): TrackerKind {
-	if (/github\.com/.test(url)) return "github";
-	if (/gitlab\.com/.test(url)) return "gitlab";
+	// Host + path-separator anchored, so a look-alike host can't spoof a match.
+	// Real remotes are `https://github.com/...` / `git@github.com:...`, so the host
+	// is bordered by a scheme/credential boundary (`/`, `:`, `@`, or start) on the
+	// left and a path separator (`/` or `:` or end) on the right. This rejects
+	// `notgithub.com`, `github.com.evil.example`, and `fakegitlab.com`.
+	if (/(^|[/:@])github\.com(?=[/:]|$)/.test(url)) return "github";
+	if (/(^|[/:@])gitlab\.com(?=[/:]|$)/.test(url)) return "gitlab";
 	return "local";
 }
 
