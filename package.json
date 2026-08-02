@@ -44,13 +44,13 @@
 		"js-yaml": "^4.1.0"
 	},
 	"peerDependencies": {
-		"@earendil-works/pi-coding-agent": "*",
-		"@earendil-works/pi-tui": "*"
+		"@earendil-works/pi-coding-agent": "^0.83.0",
+		"@earendil-works/pi-tui": "^0.83.0"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.5.0",
-		"@earendil-works/pi-coding-agent": "*",
-		"@earendil-works/pi-tui": "*",
+		"@earendil-works/pi-coding-agent": "0.83.0",
+		"@earendil-works/pi-tui": "0.83.0",
 		"@types/js-yaml": "^4.0.9",
 		"@types/node": "^22.0.0",
 		"husky": "^9.1.0",

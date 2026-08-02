@@ -24,6 +24,7 @@ describe("BUILTIN_PROFILES", () => {
 			"render-raw",
 			"repo-explorer",
 			"overview",
+			"terminal-status",
 		]);
 	});
 

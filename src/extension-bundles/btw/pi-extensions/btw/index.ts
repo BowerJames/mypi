@@ -67,7 +67,6 @@ export default function btwExtension(pi: ExtensionAPI): void {
 				activeTools: pi.getActiveTools(),
 				messages: context.messages,
 				model: ctx.model,
-				modelRegistry: ctx.modelRegistry,
 				thinkingLevel: pi.getThinkingLevel(),
 			};
 

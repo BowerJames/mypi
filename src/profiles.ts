@@ -35,6 +35,7 @@ export const BUILTIN_PROFILES: Record<string, Profile> = {
 			"render-raw",
 			"repo-explorer",
 			"overview",
+			"terminal-status",
 		],
 	},
 	reviewer: {

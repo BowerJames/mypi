@@ -53,7 +53,9 @@ function minimalResourceLoader(systemPrompt: string): ResourceLoader {
 		getThemes: () => ({ themes: [], diagnostics: [] }),
 		getAgentsFiles: () => ({ agentsFiles: [] }),
 		getSystemPrompt: () => systemPrompt,
+		getSystemPromptSource: () => undefined,
 		getAppendSystemPrompt: () => [],
+		getAppendSystemPromptSources: () => [],
 		extendResources: () => {},
 		reload: async () => {},
 	};
@@ -179,7 +181,6 @@ export async function runBtwClone(inputs: BtwInputs, task: BtwTask): Promise<Btw
 	const { session } = await createAgentSession({
 		cwd: inputs.cwd,
 		model: inputs.model,
-		modelRegistry: inputs.modelRegistry,
 		thinkingLevel: inputs.thinkingLevel,
 		sessionManager: SessionManager.inMemory(inputs.cwd),
 		resourceLoader: minimalResourceLoader(inputs.systemPrompt),

@@ -55,6 +55,7 @@ describe("discoverBundles", () => {
 		expect(bundles).toContain("repo-explorer");
 		expect(bundles).toContain("overview");
 		expect(bundles).toContain("llm-wiki");
+		expect(bundles).toContain("terminal-status");
 	});
 
 	it("returns a sorted array", () => {
