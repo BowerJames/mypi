@@ -1,7 +1,7 @@
 /**
  * Doctrine builders for the wayfinder extension.
  *
- * The two commands inject these as one-off context messages (like
+ * The three commands inject these as one-off context messages (like
  * `llm-wiki`'s `/wiki-ingest`/`/wiki-query`/`/wiki-lint`): the extension
  * detects the tracker at runtime and composes the doctrine with the correct
  * tracker operations, so this is the single source of truth — no separate
@@ -28,6 +28,16 @@ export interface TicketDoctrineInput {
 	repo: string;
 	/** The user-supplied ticket reference (issue number/URL, or a local path). */
 	ticketRef: string;
+}
+
+export interface SpecDoctrineInput {
+	tracker: TrackerKind;
+	repo: string;
+	/**
+	 * The user-supplied map reference (issue number/URL on a tracker, or an
+	 * effort slug/path on the local tracker) — the closed map to convert.
+	 */
+	mapRef: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -202,5 +212,181 @@ export function buildTicketDoctrine(input: TicketDoctrineInput): string {
 		GRILLING_SECTION,
 		"",
 		trackerOpsSection(input.tracker, input.repo),
+	].join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// /to-spec — map → spec issue stage
+// ---------------------------------------------------------------------------
+//
+// The spec stage (wayfinder map #48). Mirrors buildChartDoctrine /
+// buildTicketDoctrine but drives *synthesis*, not grilling: read a closed map's
+// durable inputs, fill the verbatim 7-section template, and publish a
+// `wayfinder:spec` successor issue in one shot. Wired to the seven decisions:
+//   #49 durable inputs (+ ingest prototype/research as a digest)
+//   #50 pure one-shot, no confirm gate
+//   #51 lives in the wayfinder bundle, command `/to-spec <map-ref>`
+//   #52 `wayfinder:spec` successor issue, linked both ways, map closes first
+//   #53 adopt upstream's 7-section template verbatim; seams = process, not a section
+//   #55 re-run overwrites the spec body in place (stable URL / successor link)
+//   #56 issue body only — never write/commit a repo file
+
+/**
+ * The spec template, adopted verbatim from `mattpocock/skills` `to-spec`
+ * (decision #53). Structural/content fidelity to the source; terminology is
+ * aligned to wayfinder at the *doctrine* layer, so the template body is
+ * untouched. The spec stage fills this in.
+ */
+const SPEC_TEMPLATE = `## Problem Statement
+
+The problem that the user is facing, from the user's perspective.
+
+## Solution
+
+The solution to the problem, from the user's perspective.
+
+## User Stories
+
+A LONG, numbered list of user stories. Each user story should be in the format of:
+
+1. As an <actor>, I want a <feature>, so that <benefit>
+
+<user-story-example>
+1. As a mobile bank customer, I want to see balance on my accounts, so that I can make better informed decisions about my spending
+</user-story-example>
+
+This list of user stories should be extremely extensive and cover all aspects of the feature.
+
+## Implementation Decisions
+
+A list of implementation decisions that were made. This can include:
+
+- The modules that will be built/modified
+- The interfaces of those modules that will be modified
+- Technical clarifications from the developer
+- Architectural decisions
+- Schema changes
+- API contracts
+- Specific interactions
+
+Do NOT include specific file paths or code snippets. They may end up being outdated very quickly.
+
+Exception: if a prototype produced a snippet that encodes a decision more precisely than prose can (state machine, reducer, schema, type shape), inline it within the relevant decision and note briefly that it came from a prototype. Trim to the decision-rich parts — not a working demo, just the important bits.
+
+## Testing Decisions
+
+A list of testing decisions that were made. Include:
+
+- A description of what makes a good test (only test external behavior, not implementation details)
+- Which modules will be tested
+- Prior art for the tests (i.e. similar types of tests in the codebase)
+
+## Out of Scope
+
+A description of the things that are out of scope for this spec.
+
+## Further Notes
+
+Any further notes about the feature.`;
+
+/**
+ * The seams / deep-module concept, carried as **process guidance** in the
+ * doctrine — not edited into the Testing Decisions section (decision #53).
+ * Used while filling *Implementation Decisions* and *Testing Decisions*.
+ */
+const SEAMS_SECTION = `### Seams / deep-module (process, not a section)
+
+While filling *Implementation Decisions* and *Testing Decisions*, reason about **seams** — the boundaries where tests and change can hook in — and prefer a **deep module** (a narrow interface hiding a wide implementation):
+
+- **Sketch the seams first.** For each piece of the solution, name where it joins the rest of the system (a function signature, a CLI surface, an event, a label). A good seam is narrow and stable.
+- **Prefer an existing seam to a new one.** If the codebase already exposes a join point that fits (an existing command, hook, doctrine builder, manifest field), route through it rather than inventing a parallel one. State which existing seam you reused.
+- **Push to the highest seam possible.** Hook as close to the edge as you can (a public command, a label, a config) before reaching into internals — the higher the seam, the less the spec couples to today's implementation.
+- **Ideal is one seam per concern.** If a decision implies several overlapping seams, prefer collapsing them; flag any that can't be collapsed as open risk.
+
+Record the chosen seams as part of the relevant decision ("routes through the existing X seam"), not as a separate section.`;
+
+function githubSpecOps(): string {
+	return `### Tracker operations — GitHub Issues (spec synthesis)
+
+The spec is a \`wayfinder:spec\` **successor** issue — produced, not resolved, so it is **not** a child of the map (do not use the sub-issues link). Use the \`gh\` CLI; the repo is inferred from \`git remote\`.
+
+- **Eligibility gate (map must be closed).** Before synthesising: confirm the map is closed (\`gh issue view <map> --json state --jq .state\` → \`CLOSED\`) and every child is closed (each sub-issue / \`Part of #<map>\` ticket is \`CLOSED\`). If any is open, **stop** — name the still-open ticket and tell the user the stage runs only once map + all children are closed. Do not synthesise against an open map.
+- **Synthesise from durable inputs only.** Read the map body (Destination · Notes · Decisions so far · Out of scope) via \`gh issue view <map>\`, and **every closed child ticket's resolution comment** via \`gh api repos/<owner>/<repo>/issues/<n>/comments --jq '.[].body'\`. Add targeted codebase exploration. Do **not** read the live conversation — the stage is re-runnable from the map alone.
+- **Ingest prototype/research as a digest.** Where a closed child is a prototype or research ticket, fold a summary of what it *proved/concluded* into the relevant spec section — not verbatim, and not a bare link (the spec must stay self-contained if a worktree is wiped).
+- **Create the spec successor (first run).** \`gh issue create --label wayfinder:spec --title "<map title> — spec" --body "<rendered spec>"\`. The body opens with \`Spec for #<map>\`. Link both ways: the spec body already carries \`Spec for #<map>\`, and you add a \`Spec: #<spec>\` pointer to the **map body** (\`gh issue edit <map> --body "<updated map body>"\`).
+- **Re-run = overwrite in place.** If a \`wayfinder:spec\` issue referencing the map already exists (\`gh issue list --label wayfinder:spec --search "Spec for #<map>"\`), re-synthesise and \`gh issue edit <spec> --body "<re-synthesised spec>"\` — same issue, stable URL, stable successor link. Do **not** mint a new issue; do **not** refuse.
+- **Never write the repo.** \`/to-spec\` creates/edits only the \`wayfinder:spec\` issue (+ its label + the two-way successor links). It must not \`write\`/commit any repo path — no \`docs/specs/\` mirror, ever.
+- **No confirm gate.** Publish the spec issue immediately on invocation. There is no preview-and-confirm step; recovery is downstream (re-run, or edit the published issue).`;
+}
+
+function gitlabSpecOps(): string {
+	return `### Tracker operations — GitLab Issues (spec synthesis)
+
+The spec is a \`wayfinder:spec\` **successor** issue — produced, not resolved, so it is **not** a child of the map. Use the [\`glab\`](https://gitlab.com/gitlab-org/cli) CLI; GitLab calls comments "notes".
+
+- **Eligibility gate (map must be closed).** Confirm the map is closed (\`glab issue view <map>\` shows \`closed\`) and every child is closed. If any is open, **stop** — name it and tell the user the stage runs only once map + all children are closed.
+- **Synthesise from durable inputs only.** Read the map description (Destination · Notes · Decisions so far · Out of scope) and **every closed child ticket's resolution note** (\`glab issue view <n> --comments\`). Add targeted codebase exploration. Do not read the live conversation.
+- **Ingest prototype/research as a digest** folded into the relevant section.
+- **Create the spec successor (first run).** \`glab issue create --label wayfinder:spec --title "<map title> — spec" --description "<rendered spec>"\`; the description opens with \`Spec for #<map>\`. Link both ways: add a \`Spec: #<spec>\` pointer to the map description (\`glab issue update <map> --description "<updated>"\`).
+- **Re-run = overwrite in place.** Find the existing spec (\`glab issue list -l wayfinder:spec\`), then \`glab issue update <spec> --description "<re-synthesised spec>"\` — same issue, stable URL. Do not mint a new issue.
+- **Never write the repo.** Create/edits only the \`wayfinder:spec\` issue. No repo file, ever.
+- **No confirm gate.** Publish immediately; recover downstream.`;
+}
+
+function localSpecOps(repo: string): string {
+	return `### Tracker operations — Local Markdown (spec synthesis)
+
+The map lives at \`/tmp/.wayfinder/${repo}/<effort-slug>/map.md\`; the spec is written as a sibling file \`<effort>/spec.md\` (not under \`issues/\` — it is a successor, not a child primitive). All ephemeral.
+
+- **Eligibility gate (map must be closed).** The local map has no \`state\`; a map is "closed" when every file in \`<effort>/issues/\` is \`Status: resolved\`. If any is not, **stop** — name it and tell the user to resolve it first.
+- **Synthesise from durable inputs only.** Read \`map.md\` and each resolved ticket file's \`## Answer\`. Add targeted codebase exploration. Do not read the live conversation.
+- **Ingest prototype/research as a digest** folded into the relevant section.
+- **Create the spec successor (first run).** Write \`<effort>/spec.md\` whose first line is \`Spec for: <map title>\`, then the rendered spec. Link back from the map by appending a \`Spec: <effort>/spec.md\` line to \`map.md\`.
+- **Re-run = overwrite in place.** Overwrite \`<effort>/spec.md\` with the re-synthesised spec; keep the \`Spec:\` pointer in \`map.md\`. Do not version.
+- **Never write the repo.** Everything stays under \`/tmp/.wayfinder/\` (ephemeral, never committed). No repo file.
+- **No confirm gate.** Write the spec file immediately; recover by re-running or editing.`;
+}
+
+/** Spec-stage tracker ops, selected by the detected tracker. */
+export function specTrackerOpsSection(tracker: TrackerKind, repo: string): string {
+	switch (tracker) {
+		case "github":
+			return githubSpecOps();
+		case "gitlab":
+			return gitlabSpecOps();
+		default:
+			return localSpecOps(repo);
+	}
+}
+
+/**
+ * The doctrine injected by \`/to-spec <map-ref>\`: convert a **closed** wayfinder
+ * map into a spec issue — a PRD-style hand-off. Read the durable inputs, fill
+ * the verbatim 7-section template, and publish a \`wayfinder:spec\` successor
+ * issue in one shot (no confirm gate); re-run overwrites in place. This stage
+ * synthesises — it does not grill, create wayfinder tickets, or write the repo.
+ */
+export function buildSpecDoctrine(input: SpecDoctrineInput): string {
+	return [
+		"## Wayfinder — convert a closed map to a spec",
+		"",
+		`You are running \`/to-spec ${input.mapRef}\`: converting a **completed** wayfinder map into a **spec issue** — a PRD-style hand-off to the build chain. You synthesise; you do not grill, you do not create wayfinder tickets, you do not change the repo.`,
+		"",
+		"### Flow",
+		"",
+		"1. **Gate on eligibility.** The map must be closed — map + every child resolved. If any is open, stop and name it; do not synthesise against an open map.",
+		"2. **Gather the durable inputs** — the map body (Destination · Notes · Decisions so far · Out of scope) and **every closed child ticket's resolution**. Add targeted codebase exploration. Ignore the live conversation: the stage is re-runnable from the map alone.",
+		"3. **Ingest prototype/research as a digest.** Where a closed child is a prototype or research ticket, fold a summary of what it *proved/concluded* into the relevant section — not verbatim, not a link.",
+		"4. **Fill the template** (verbatim below) from those inputs. Refer to every map and ticket by its **title** (the id rides inside the name as its link) — a wall of `#42, #43` is illegible in a hand-off doc.",
+		"5. **Publish in one shot.** Create (or, on re-run, overwrite in place) the `wayfinder:spec` successor issue and link it both ways. No preview-and-confirm gate — publish immediately; recovery is downstream.",
+		"6. **Stop.** The spec is the hand-off. Its acceptance/implementation lifecycle is downstream (out of scope for this stage).",
+		"",
+		"### The spec template (fill this in)",
+		"",
+		SPEC_TEMPLATE,
+		"",
+		SEAMS_SECTION,
+		"",
+		specTrackerOpsSection(input.tracker, input.repo),
 	].join("\n");
 }

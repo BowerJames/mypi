@@ -184,7 +184,7 @@ mypi ships 12 **bundles**, each under `extension-bundles/<name>/`. Most contain 
 | `overview` | prompt | Overview of the repository, core components, and open issues |
 | `terminal-status` | pi-extension | Reflect session state in the terminal tab title — on `agent_start` sets the title to `working`, on `agent_settled` sets it to `idle`. Works in any terminal (TUI mode) by emitting the OSC 1 tab-title escape sequence (`\033]1;<title>\007`) to stdout. Best-effort: a failed write is swallowed. Note: pi's own window-title writes (OSC 0) can momentarily override the tab title on startup/session change |
 | `llm-wiki` | pi-extension | Turn the agent into a wiki manager for an [OKF](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) wiki (Karpathy's [LLM-wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)) — `/wiki-root`/`/wiki-spec` configure the bundle root and per-wiki spec doc (defaults `wiki/` and `/SPEC.md`), the spec is **auto-injected** into the system prompt each turn, `/wiki-init` scaffolds empty assets, and `/wiki-ingest`/`/wiki-query`/`/wiki-lint` inject the operating-model guidance |
-| `wayfinder` | pi-extension | Chart a large, foggy effort as a **map of decision tickets** on the issue tracker, resolving one at a time until the way to the destination is clear (inspired by [mattpocock/skills `wayfinder`](https://github.com/mattpocock/skills/tree/main/skills/engineering/wayfinder)). `/wayfinder` grills the destination and creates the map + frontier tickets; `/wayfinder <ticket-ref>` points a session at a ticket (the model auto-detects its type). Tracker is autodetected (GitHub/GitLab/local `/tmp/.wayfinder/<repo>/`), overridable via `cwd/.mypi/wayfinder-tracker.sh`. Five primitives: Map, Decision, Prototype (worktree under `~/.worktrees/`), Research (user-spawned), Task |
+| `wayfinder` | pi-extension | Chart a large, foggy effort as a **map of decision tickets** on the issue tracker, resolving one at a time until the way to the destination is clear (inspired by [mattpocock/skills `wayfinder`](https://github.com/mattpocock/skills/tree/main/skills/engineering/wayfinder)). `/wayfinder` grills the destination and creates the map + frontier tickets; `/wayfinder <ticket-ref>` points a session at a ticket (the model auto-detects its type); `/to-spec <map-ref>` converts a closed map into a `wayfinder:spec` successor issue (PRD hand-off). Tracker is autodetected (GitHub/GitLab/local `/tmp/.wayfinder/<repo>/`), overridable via `cwd/.mypi/wayfinder-tracker.sh`. Five primitives: Map, Decision, Prototype (worktree under `~/.worktrees/`), Research (user-spawned), Task |
 
 ### Bundle dependencies
 
@@ -410,13 +410,14 @@ mypi --profile wayfinder
 mypi run --bundle wayfinder   # ad hoc, no profile/config needed
 ```
 
-**Commands** (both one-shot doctrine injectors — no persisted state, no
+**Commands** (all three one-shot doctrine injectors — no persisted state, no
 per-turn system-prompt suffix, no footer):
 
 | Command | Purpose |
 |---------|---------|
 | `/wayfinder` | Grill the destination, then create the map ticket and the primitive tickets for the frontier |
 | `/wayfinder <ticket-ref>` | Point this session at a specific ticket; the model auto-detects its primitive type and acts accordingly |
+| `/to-spec <map-ref>` | Convert a **closed** map into a `wayfinder:spec` **successor** issue — a PRD-style hand-off. Synthesises the map's Decisions + every closed child's resolution (+ codebase exploration) into the verbatim 7-section template, published in one shot (no confirm gate); re-run overwrites in place. Never writes the repo — the spec lives only as the issue body |
 
 **Five primitives** (each a child issue of the `wayfinder:map` parent, or a
 `Type:` line locally):
@@ -444,6 +445,21 @@ composed with the correct tracker operations. Grilling is folded into the
 doctrine (no separate command). It declares `terminal-status` as a bundle
 dependency (not in profiles), so the terminal tab always reflects session
 state whenever wayfinder is active.
+
+**Map → spec hand-off.** When the map and all its children close, `/to-spec
+<map-ref>` converts it into a `wayfinder:spec` **successor** issue (linked both
+ways — produced, not a child) — a PRD-style hand-off adopting
+[mattpocock/skills `to-spec`](https://github.com/mattpocock/skills/tree/main/skills/engineering/to-spec)'s
+7-section template verbatim (Problem · Solution · User Stories · Implementation
+Decisions · Testing Decisions · Out of Scope · Further Notes). It synthesises
+from durable inputs only (the map's Decisions + every closed child's resolution
++ targeted codebase exploration — no live conversation), ingests prototype /
+research findings as a digest so the spec is self-contained, and publishes in
+one shot with **no confirm gate**; re-running overwrites the spec body in place
+(same successor link, stable URL). The spec lives **only** as the issue body —
+it never writes the repo (no `docs/specs/` mirror). This ends the wayfinder
+stage; splitting the spec into implementation tickets (`to-tickets`) and
+building it are downstream and out of scope.
 
 ## Development
 
