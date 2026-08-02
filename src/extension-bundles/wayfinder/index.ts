@@ -6,11 +6,13 @@
  * the repo's issue tracker, and resolve them one at a time until the way to
  * the destination is clear.
  *
- * Two commands (both one-shot doctrine injectors):
+ * Three commands (each a one-shot doctrine injector):
  *   /wayfinder              — grill the destination, then create the map and
  *                             the primitive tickets for the frontier.
  *   /wayfinder <ticket-ref> — point this session at a ticket; the model
  *                             auto-detects its primitive type and acts.
+ *   /to-spec <map-ref>      — convert a *closed* wayfinder map into a
+ *                             `wayfinder:spec` successor issue (PRD hand-off).
  *
  * The extension detects the tracker at runtime (GitHub / GitLab / local
  * markdown) and composes the doctrine with the correct tracker operations,

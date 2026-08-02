@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { buildChartDoctrine, buildTicketDoctrine, trackerOpsSection } from "./prompt.js";
+import {
+	buildChartDoctrine,
+	buildSpecDoctrine,
+	buildTicketDoctrine,
+	specTrackerOpsSection,
+	trackerOpsSection,
+} from "./prompt.js";
 
 const REPO = "mypi";
 
@@ -98,6 +104,71 @@ describe("trackerOpsSection", () => {
 	});
 });
 
+describe("buildSpecDoctrine", () => {
+	const doc = buildSpecDoctrine({ tracker: "github", repo: REPO, mapRef: "42" });
+
+	it("announces the spec flow and embeds the mapRef", () => {
+		expect(doc).toContain("## Wayfinder — convert a closed map to a spec");
+		expect(doc).toContain("You are running `/to-spec 42`");
+	});
+
+	it("carries the verbatim 7-section template", () => {
+		expect(doc).toContain("## Problem Statement");
+		expect(doc).toContain("## Solution");
+		expect(doc).toContain("## User Stories");
+		expect(doc).toContain("## Implementation Decisions");
+		expect(doc).toContain("## Testing Decisions");
+		expect(doc).toContain("## Out of Scope");
+		expect(doc).toContain("## Further Notes");
+	});
+
+	it("carries the seams/deep-module process, not as a template section", () => {
+		expect(doc).toContain("### Seams / deep-module (process, not a section)");
+		expect(doc).toContain("deep module");
+		// the verbatim template's Testing Decisions guidance is left untouched
+		expect(doc).toContain("Prior art for the tests");
+	});
+
+	it("encodes the seven decisions (durable inputs, one-shot, successor, overwrite, no repo file)", () => {
+		expect(doc).toContain("durable");
+		expect(doc).toContain("re-runnable from the map alone");
+		expect(doc).toContain("No confirm gate");
+		expect(doc).toContain("wayfinder:spec");
+		expect(doc).toContain("successor");
+		expect(doc).toContain("overwrite in place");
+		expect(doc).toContain("Never write the repo");
+		expect(doc).not.toContain("ready-for-agent");
+	});
+
+	it("does not grill or create wayfinder tickets", () => {
+		expect(doc).toContain("you do not grill");
+		expect(doc).toContain("you do not create wayfinder tickets");
+		expect(doc).not.toContain("### Grilling");
+	});
+});
+
+describe("specTrackerOpsSection", () => {
+	it("selects GitHub spec ops (successor, not a child)", () => {
+		const ops = specTrackerOpsSection("github", REPO);
+		expect(ops).toContain("GitHub Issues (spec synthesis)");
+		expect(ops).toContain("wayfinder:spec");
+		expect(ops).toContain("successor");
+		expect(ops).toContain("**not** a child");
+		expect(ops).not.toContain("/tmp/.wayfinder/");
+	});
+
+	it("selects GitLab spec ops", () => {
+		expect(specTrackerOpsSection("gitlab", REPO)).toContain("GitLab Issues (spec synthesis)");
+	});
+
+	it("selects local spec ops and templates the repo slug", () => {
+		const ops = specTrackerOpsSection("local", REPO);
+		expect(ops).toContain("Local Markdown (spec synthesis)");
+		expect(ops).toContain(`/tmp/.wayfinder/${REPO}/`);
+		expect(ops).toContain("spec.md");
+	});
+});
+
 describe("doctrine round-trips per tracker", () => {
 	for (const tracker of ["local", "github", "gitlab"] as const) {
 		it(`chart doctrine selects ${tracker} ops`, () => {
@@ -111,6 +182,13 @@ describe("doctrine round-trips per tracker", () => {
 			const doc = buildTicketDoctrine({ tracker, repo: REPO, ticketRef: "7" });
 			if (tracker === "github") expect(doc).toContain("GitHub Issues");
 			if (tracker === "gitlab") expect(doc).toContain("GitLab Issues");
+			if (tracker === "local") expect(doc).toContain(`/tmp/.wayfinder/${REPO}/`);
+		});
+
+		it(`spec doctrine selects ${tracker} spec ops`, () => {
+			const doc = buildSpecDoctrine({ tracker, repo: REPO, mapRef: "42" });
+			if (tracker === "github") expect(doc).toContain("spec synthesis");
+			if (tracker === "gitlab") expect(doc).toContain("spec synthesis");
 			if (tracker === "local") expect(doc).toContain(`/tmp/.wayfinder/${REPO}/`);
 		});
 	}

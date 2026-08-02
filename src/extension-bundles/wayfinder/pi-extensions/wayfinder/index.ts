@@ -15,8 +15,10 @@
  *                             the primitive tickets for the frontier.
  *   /wayfinder <ticket-ref> — point this session at a ticket; the model
  *                             auto-detects its primitive type and acts.
+ *   /to-spec <map-ref>      — convert a *closed* wayfinder map into a
+ *                             `wayfinder:spec` successor issue (PRD hand-off).
  *
- * Both commands are one-shot doctrine injectors (`pi.sendMessage`) — there is
+ * All three commands are one-shot doctrine injectors (`pi.sendMessage`) — there is
  * no persisted session state, no per-turn system-prompt suffix, and no footer.
  * The tracker is environment-derived (autodetected from the `origin` remote,
  * with a `cwd/.mypi/wayfinder-tracker.sh` override) and memoised per session.
@@ -27,7 +29,7 @@
 import { existsSync } from "node:fs";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { repoSlug, trackerScriptPath } from "./paths.js";
-import { buildChartDoctrine, buildTicketDoctrine } from "./prompt.js";
+import { buildChartDoctrine, buildSpecDoctrine, buildTicketDoctrine } from "./prompt.js";
 import { detectTracker, type TrackerEnv, type TrackerKind } from "./tracker.js";
 
 /**
@@ -105,6 +107,41 @@ export default function wayfinderExtension(pi: ExtensionAPI): void {
 					{ triggerTurn: idle, deliverAs: idle ? undefined : "nextTurn" },
 				);
 			}
+		},
+	});
+
+	// `/to-spec <map-ref>`: convert a closed wayfinder map into a spec issue.
+	// A second one-shot doctrine injector in the same bundle, kept distinct
+	// from `/wayfinder` (which works a single ticket): the spec stage consumes
+	// a whole map. Same carry-forward rule as the wayfinder command:
+	// `triggerTurn` only when idle, else `nextTurn`.
+	pi.registerCommand("to-spec", {
+		description: "Convert a closed wayfinder map into a wayfinder:spec issue (/to-spec <map-ref>)",
+		handler: async (args, ctx) => {
+			const tracker = await resolveTracker(ctx);
+			const repo = repoSlug(ctx.cwd);
+			const mapRef = args.trim();
+
+			ctx.ui.notify(`Wayfinder to-spec tracker: ${tracker}`, "info");
+
+			if (!mapRef) {
+				ctx.ui.notify(
+					"Usage: /to-spec <map-ref> — pass the closed map's issue number/URL (or local effort slug/path).",
+					"error",
+				);
+				return;
+			}
+
+			const idle = ctx.isIdle();
+
+			pi.sendMessage(
+				{
+					customType: "wayfinder-spec",
+					content: buildSpecDoctrine({ tracker, repo, mapRef }),
+					display: true,
+				},
+				{ triggerTurn: idle, deliverAs: idle ? undefined : "nextTurn" },
+			);
 		},
 	});
 }
