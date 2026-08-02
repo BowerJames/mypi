@@ -14,8 +14,15 @@
  *
  * The extension detects the tracker at runtime (GitHub / GitLab / local
  * markdown) and composes the doctrine with the correct tracker operations,
- * so it ships no tracker adapter documents and has no bundle dependencies.
- * Grilling is folded into the injected doctrine.
+ * so it ships no tracker adapter documents. Grilling is folded into the
+ * injected doctrine.
+ *
+ * Bundle dependency: `terminal-status` (declared below) keeps the terminal
+ * tab reflecting the wayfinder session's state whenever wayfinder is active,
+ * regardless of which profile pulled it in — built-in or user-overridden.
+ * Declared on the bundle, not duplicated in profiles, matching the
+ * `repo-explorer` → `dynamic-skills` convention so transitive activation
+ * guarantees it survives any profile override.
  */
 
 import { dirname, join } from "node:path";
@@ -29,4 +36,5 @@ export default {
 	piExtensions: [join(here, "pi-extensions", "wayfinder", "index.ts")],
 	skills: [],
 	prompts: [],
+	dependencies: ["terminal-status"],
 } satisfies ExtensionBundleManifest;

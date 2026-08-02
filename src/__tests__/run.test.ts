@@ -88,6 +88,14 @@ describe("resolveRunArgs", () => {
 			expect(out[1]).toContain(bundleEntry("dynamic-skills"));
 			expect(out[3]).toContain(bundleEntry("repo-explorer"));
 		});
+
+		it("auto-activates wayfinder's terminal-status dependency, emitted first", async () => {
+			const out = await resolveRunArgs(["--bundle", "wayfinder"]);
+			// terminal-status (pi-extension) must precede wayfinder (pi-extension).
+			expect(out).toEqual(["-e", out[1], "-e", out[3]]);
+			expect(out[1]).toContain(bundleEntry("terminal-status"));
+			expect(out[3]).toContain(bundleEntry("wayfinder"));
+		});
 	});
 
 	describe("forwards other tokens verbatim", () => {
