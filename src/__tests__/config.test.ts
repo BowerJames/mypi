@@ -262,7 +262,7 @@ describe("loadUserConfig / saveConfig", () => {
 		expect(effective.default).toBe("custom");
 		// Both the user profile and the built-ins are present in the merge.
 		expect(Object.keys(effective.profiles).sort()).toEqual(
-			["custom", "developer", "llm-wiki", "reviewer"].sort(),
+			["custom", "developer", "llm-wiki", "reviewer", "wayfinder"].sort(),
 		);
 	});
 });

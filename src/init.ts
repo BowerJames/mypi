@@ -18,6 +18,7 @@ export const DEFAULT_CONFIG_YAML = [
 	'#   developer  — full dev agent (mode, code-review, dynamic-skills, btw, loop, render-raw, repo-explorer, overview) — "pi"',
 	'#   reviewer   — read-only code reviewer (code-review-prompt) — "pi -p"',
 	'#   llm-wiki   — LLM wiki manager in OKF format (llm-wiki) — "pi"',
+	'#   wayfinder  — chart a big effort as a map of decision tickets (wayfinder, mode, repo-explorer) — "pi"',
 	"#",
 	"# Add/override profiles under 'profiles' below (a user profile with the same",
 	"# name as a built-in replaces it). Set 'default' to choose the profile used by",

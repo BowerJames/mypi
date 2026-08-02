@@ -46,6 +46,10 @@ export const BUILTIN_PROFILES: Record<string, Profile> = {
 		cmd: "pi",
 		bundles: ["llm-wiki", "mode", "repo-explorer"],
 	},
+	wayfinder: {
+		cmd: "pi",
+		bundles: ["wayfinder", "mode", "repo-explorer"],
+	},
 };
 
 /** True when `name` is one of the built-in profile names. */

@@ -9,8 +9,13 @@ import {
 import type { Profile } from "../types.js";
 
 describe("BUILTIN_PROFILES", () => {
-	it("ships exactly the developer, llm-wiki, and reviewer profiles", () => {
-		expect(Object.keys(BUILTIN_PROFILES).sort()).toEqual(["developer", "llm-wiki", "reviewer"]);
+	it("ships exactly the developer, llm-wiki, reviewer, and wayfinder profiles", () => {
+		expect(Object.keys(BUILTIN_PROFILES).sort()).toEqual([
+			"developer",
+			"llm-wiki",
+			"reviewer",
+			"wayfinder",
+		]);
 	});
 
 	it("developer matches the repo's prior default profile (model-less)", () => {
@@ -37,6 +42,11 @@ describe("BUILTIN_PROFILES", () => {
 		expect(BUILTIN_PROFILES["llm-wiki"].cmd).toBe("pi");
 		expect(BUILTIN_PROFILES["llm-wiki"].bundles).toEqual(["llm-wiki", "mode", "repo-explorer"]);
 	});
+
+	it("wayfinder is a model-less profile that activates the wayfinder bundle", () => {
+		expect(BUILTIN_PROFILES.wayfinder.cmd).toBe("pi");
+		expect(BUILTIN_PROFILES.wayfinder.bundles).toEqual(["wayfinder", "mode", "repo-explorer"]);
+	});
 });
 
 describe("BUILTIN_DEFAULT", () => {
@@ -51,6 +61,7 @@ describe("isBuiltinProfile", () => {
 		expect(isBuiltinProfile("developer")).toBe(true);
 		expect(isBuiltinProfile("reviewer")).toBe(true);
 		expect(isBuiltinProfile("llm-wiki")).toBe(true);
+		expect(isBuiltinProfile("wayfinder")).toBe(true);
 	});
 
 	it("returns false for user-only names", () => {
@@ -62,7 +73,7 @@ describe("isBuiltinProfile", () => {
 describe("mergeProfiles", () => {
 	it("returns the built-ins when no overlay is provided", () => {
 		const merged = mergeProfiles(undefined);
-		expect(Object.keys(merged).sort()).toEqual(["developer", "llm-wiki", "reviewer"]);
+		expect(Object.keys(merged).sort()).toEqual(["developer", "llm-wiki", "reviewer", "wayfinder"]);
 		expect(merged.developer).toEqual(BUILTIN_PROFILES.developer);
 	});
 
