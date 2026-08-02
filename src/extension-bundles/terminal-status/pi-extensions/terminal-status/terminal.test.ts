@@ -2,29 +2,20 @@ import { describe, expect, it } from "vitest";
 import { updateTerminal } from "./terminal.js";
 
 describe("updateTerminal", () => {
-	it("returns the wezterm set-tab-title command for WezTerm working", () => {
-		expect(updateTerminal("WezTerm", "working")).toEqual({
-			command: "wezterm",
-			args: ["cli", "set-tab-title", "working"],
-		});
+	it("emits the OSC 1 tab-title sequence for 'working'", () => {
+		expect(updateTerminal("working")).toBe("\x1b]1;working\x07");
 	});
 
-	it("returns the wezterm set-tab-title command for WezTerm idle", () => {
-		expect(updateTerminal("WezTerm", "idle")).toEqual({
-			command: "wezterm",
-			args: ["cli", "set-tab-title", "idle"],
-		});
+	it("emits the OSC 1 tab-title sequence for 'idle'", () => {
+		expect(updateTerminal("idle")).toBe("\x1b]1;idle\x07");
 	});
 
-	it("returns undefined for an unsupported terminal program", () => {
-		// Other terminals are not (yet) supported — silent no-op.
-		expect(updateTerminal("Apple_Terminal", "idle")).toBeUndefined();
-		expect(updateTerminal("iTerm.app", "working")).toBeUndefined();
-		expect(updateTerminal("ghostty", "idle")).toBeUndefined();
-	});
-
-	it("returns undefined when TERM_PROGRAM is unset", () => {
-		expect(updateTerminal(undefined, "working")).toBeUndefined();
-		expect(updateTerminal(undefined, "idle")).toBeUndefined();
+	it("always produces a BEL-terminated OSC 1 sequence embedding the state", () => {
+		for (const state of ["working", "idle"] as const) {
+			const seq = updateTerminal(state);
+			expect(seq.startsWith("\x1b]1;")).toBe(true);
+			expect(seq.endsWith("\x07")).toBe(true);
+			expect(seq).toContain(state);
+		}
 	});
 });
