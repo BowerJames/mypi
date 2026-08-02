@@ -56,6 +56,7 @@ describe("discoverBundles", () => {
 		expect(bundles).toContain("overview");
 		expect(bundles).toContain("llm-wiki");
 		expect(bundles).toContain("terminal-status");
+		expect(bundles).toContain("wayfinder");
 	});
 
 	it("returns a sorted array", () => {

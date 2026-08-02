@@ -46,7 +46,7 @@ Notes:
 ## Setup
 
 mypi works out of the box with **no config** — built-in profiles
-(`developer`, `reviewer`, `llm-wiki`) are always available. To add or override profiles,
+(`developer`, `reviewer`, `llm-wiki`, `wayfinder`) are always available. To add or override profiles,
 create a config:
 
 ```bash
@@ -121,7 +121,7 @@ mypi init        # writes a starter overlay
 ```
 
 Example overlay adding a custom `fullstack` profile (the built-ins
-`developer`, `reviewer`, and `llm-wiki` remain available alongside it):
+`developer`, `reviewer`, `llm-wiki`, and `wayfinder` remain available alongside it):
 
 ```yaml
 default: fullstack
@@ -169,7 +169,7 @@ Bundles live under `extension-bundles/<name>/` inside the installed package. Eac
 
 ## Bundled Resources
 
-mypi ships 11 **bundles**, each under `extension-bundles/<name>/`. Most contain a single resource type; the `code-review` feature splits into an extension bundle and a prompt-only bundle (the prompt must be loadable without the extension for the review subprocess).
+mypi ships 12 **bundles**, each under `extension-bundles/<name>/`. Most contain a single resource type; the `code-review` feature splits into an extension bundle and a prompt-only bundle (the prompt must be loadable without the extension for the review subprocess).
 
 | Bundle | Contains | Description |
 |--------|----------|-------------|
@@ -184,6 +184,7 @@ mypi ships 11 **bundles**, each under `extension-bundles/<name>/`. Most contain 
 | `overview` | prompt | Overview of the repository, core components, and open issues |
 | `terminal-status` | pi-extension | Reflect session state in the terminal tab title — on `agent_start` sets the title to `working`, on `agent_settled` sets it to `idle`. Works in any terminal (TUI mode) by emitting the OSC 1 tab-title escape sequence (`\033]1;<title>\007`) to stdout. Best-effort: a failed write is swallowed. Note: pi's own window-title writes (OSC 0) can momentarily override the tab title on startup/session change |
 | `llm-wiki` | pi-extension | Turn the agent into a wiki manager for an [OKF](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) wiki (Karpathy's [LLM-wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)) — `/wiki-root`/`/wiki-spec` configure the bundle root and per-wiki spec doc (defaults `wiki/` and `/SPEC.md`), the spec is **auto-injected** into the system prompt each turn, `/wiki-init` scaffolds empty assets, and `/wiki-ingest`/`/wiki-query`/`/wiki-lint` inject the operating-model guidance |
+| `wayfinder` | pi-extension | Chart a large, foggy effort as a **map of decision tickets** on the issue tracker, resolving one at a time until the way to the destination is clear (inspired by [mattpocock/skills `wayfinder`](https://github.com/mattpocock/skills/tree/main/skills/engineering/wayfinder)). `/wayfinder` grills the destination and creates the map + frontier tickets; `/wayfinder <ticket-ref>` points a session at a ticket (the model auto-detects its type). Tracker is autodetected (GitHub/GitLab/local `/tmp/.wayfinder/<repo>/`), overridable via `cwd/.mypi/wayfinder-tracker.sh`. Five primitives: Map, Decision, Prototype (worktree under `~/.worktrees/`), Research (user-spawned), Task |
 
 ### Bundle dependencies
 
@@ -389,6 +390,58 @@ wiki-root is active.
 The agent maintains the wiki with its **built-in** tools (`read`/`write`/
 `edit`/`bash`); the extension supplies only the operating context and the
 bootstrap/config commands. It has no bundle dependencies.
+
+### Wayfinder
+
+The `wayfinder` extension turns the agent into a **wayfinder**: it charts a
+large, foggy effort — too big for one agent session, where the way from here
+to the goal isn't visible yet — as a **shared map of decision tickets** on the
+repo's issue tracker, then resolves them one at a time until the way to the
+destination is clear (inspired by [mattpocock/skills
+`wayfinder`](https://github.com/mattpocock/skills/tree/main/skills/engineering/wayfinder)).
+It **plans, it doesn't do**: every ticket resolves a *decision* — a question to
+settle, not a slice of a build to execute.
+
+A built-in `wayfinder` profile ships with the wayfinder bundle enabled, plus
+the `mode` and `repo-explorer` bundles:
+
+```bash
+mypi --profile wayfinder
+mypi run --bundle wayfinder   # ad hoc, no profile/config needed
+```
+
+**Commands** (both one-shot doctrine injectors — no persisted state, no
+per-turn system-prompt suffix, no footer):
+
+| Command | Purpose |
+|---------|---------|
+| `/wayfinder` | Grill the destination, then create the map ticket and the primitive tickets for the frontier |
+| `/wayfinder <ticket-ref>` | Point this session at a specific ticket; the model auto-detects its primitive type and acts accordingly |
+
+**Five primitives** (each a child issue of the `wayfinder:map` parent, or a
+`Type:` line locally):
+
+| Primitive | Resolved by | Closed when |
+|-----------|-------------|-------------|
+| **Map** | The index: Destination · Notes · Decisions so far · Not yet specified · Out of scope | The map **and** all its child tickets are closed |
+| **Decision** | A relentless one-question-at-a-time grilling (recommended answer each); the agent never answers for the human | The decision is made |
+| **Prototype** | Scaffold a worktree at `~/.worktrees/<map-slug>/<ticket-slug>/` and build a cheap artifact to react to | The user confirms a design, or new primitives are spun off to push the fog back |
+| **Research** | Investigate against primary sources and capture findings — **not** auto-launched; the user spawns a session and points it at the ticket | The fog is pushed back enough that the correct new primitives can be created |
+| **Task** | Manual work that must precede a decision (provision access, sign up for a service, move data); the agent drives where it can, else hands over a checklist | The work is done (the resolution records what was done + any resulting facts) |
+
+**Tracker autodetection.** The extension picks the tracker from the
+environment (it is not configured via a slash command): GitHub Issues for a
+`github.com` remote, GitLab Issues for a `gitlab.com` remote, otherwise a
+local-markdown fallback at `/tmp/.wayfinder/<repo>/` (ephemeral — `<repo>` is
+the cwd's directory name, wiped on reboot, never committed). A self-hosted
+escape hatch: if `cwd/.mypi/wayfinder-tracker.sh` exists and prints one of
+`local`/`github`/`gitlab`, that wins. The detected tracker is memoised for the
+session and surfaced via a `Wayfinder tracker: <kind>` notification.
+
+The agent does all tracker I/O with its **built-in** tools (`bash` → `gh` /
+`glab` / file writes); the extension supplies only the operating doctrine,
+composed with the correct tracker operations. Grilling is folded into the
+doctrine (no separate command). It has no bundle dependencies.
 
 ## Development
 
