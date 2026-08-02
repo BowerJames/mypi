@@ -169,7 +169,7 @@ Bundles live under `extension-bundles/<name>/` inside the installed package. Eac
 
 ## Bundled Resources
 
-mypi ships 10 **bundles**, each under `extension-bundles/<name>/`. Most contain a single resource type; the `code-review` feature splits into an extension bundle and a prompt-only bundle (the prompt must be loadable without the extension for the review subprocess).
+mypi ships 11 **bundles**, each under `extension-bundles/<name>/`. Most contain a single resource type; the `code-review` feature splits into an extension bundle and a prompt-only bundle (the prompt must be loadable without the extension for the review subprocess).
 
 | Bundle | Contains | Description |
 |--------|----------|-------------|
@@ -182,6 +182,7 @@ mypi ships 10 **bundles**, each under `extension-bundles/<name>/`. Most contain 
 | `code-review-prompt` | prompt | Independent code review of an issue's implementation on a branch. Usage: `/code-review <issue_number> <branch_to_review> <target_branch_of_pr>` |
 | `repo-explorer` | skill | Explore third-party codebases/libraries/frameworks without cluttering the active workspace — clones into a `/tmp/repos/` cache and reuses existing checkouts. Auto-activates `dynamic-skills` (its `SKILL.md` uses dynamic `!` shell blocks) |
 | `overview` | prompt | Overview of the repository, core components, and open issues |
+| `terminal-status` | pi-extension | Reflect session state in the terminal tab title — on `agent_start` sets the title to `working`, on `agent_settled` sets it to `idle`. WezTerm-only today (`wezterm cli set-tab-title`, keyed off `$TERM_PROGRAM`); other terminals are a silent no-op. Best-effort: a missing binary or failed exec is swallowed |
 | `llm-wiki` | pi-extension | Turn the agent into a wiki manager for an [OKF](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) wiki (Karpathy's [LLM-wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)) — `/wiki-root`/`/wiki-spec` configure the bundle root and per-wiki spec doc (defaults `wiki/` and `/SPEC.md`), the spec is **auto-injected** into the system prompt each turn, `/wiki-init` scaffolds empty assets, and `/wiki-ingest`/`/wiki-query`/`/wiki-lint` inject the operating-model guidance |
 
 ### Bundle dependencies
