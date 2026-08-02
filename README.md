@@ -441,7 +441,9 @@ session and surfaced via a `Wayfinder tracker: <kind>` notification.
 The agent does all tracker I/O with its **built-in** tools (`bash` → `gh` /
 `glab` / file writes); the extension supplies only the operating doctrine,
 composed with the correct tracker operations. Grilling is folded into the
-doctrine (no separate command). It has no bundle dependencies.
+doctrine (no separate command). It declares `terminal-status` as a bundle
+dependency (not in profiles), so the terminal tab always reflects session
+state whenever wayfinder is active.
 
 ## Development
 

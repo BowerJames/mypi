@@ -77,18 +77,33 @@ export default function wayfinderExtension(pi: ExtensionAPI): void {
 
 			ctx.ui.notify(`Wayfinder tracker: ${tracker}`, "info");
 
+			// Each command path emits exactly one doctrine message, so both carry
+			// the turn trigger (the "final message only" carry-forward rule). When
+			// idle, `triggerTurn` starts the agent on the doctrine; when already
+			// streaming, the doctrine is parked as `nextTurn` context and injected
+			// at the start of the next user-initiated turn — never a mid-flight
+			// `steer` of an unrelated turn, nor `followUp` (which would auto-fire
+			// with no input).
+			const idle = ctx.isIdle();
+
 			if (ticketRef) {
-				pi.sendMessage({
-					customType: "wayfinder-ticket",
-					content: buildTicketDoctrine({ tracker, repo, ticketRef }),
-					display: true,
-				});
+				pi.sendMessage(
+					{
+						customType: "wayfinder-ticket",
+						content: buildTicketDoctrine({ tracker, repo, ticketRef }),
+						display: true,
+					},
+					{ triggerTurn: idle, deliverAs: idle ? undefined : "nextTurn" },
+				);
 			} else {
-				pi.sendMessage({
-					customType: "wayfinder-chart",
-					content: buildChartDoctrine({ tracker, repo }),
-					display: true,
-				});
+				pi.sendMessage(
+					{
+						customType: "wayfinder-chart",
+						content: buildChartDoctrine({ tracker, repo }),
+						display: true,
+					},
+					{ triggerTurn: idle, deliverAs: idle ? undefined : "nextTurn" },
+				);
 			}
 		},
 	});
