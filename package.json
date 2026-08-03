@@ -1,6 +1,6 @@
 {
 	"name": "@bowerjames/mypi",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"description": "Curated library of pi extensions, skills, and prompts with profile-based launching",
 	"type": "module",
 	"bin": {
