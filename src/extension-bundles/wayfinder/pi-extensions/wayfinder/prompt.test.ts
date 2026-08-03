@@ -370,3 +370,92 @@ describe("doctrine round-trips per tracker", () => {
 		});
 	}
 });
+
+describe("shared Research bullet — sourcing enrichment", () => {
+	// the shared bullet feeds both chart and ticket doctrines
+	it("chart doctrine carries the sourcing clause + external/internal carve-outs", () => {
+		const chart = buildChartDoctrine({ tracker: "github", repo: REPO });
+		expect(chart).toContain("grills for its starting sources");
+		expect(chart).toContain("external/credentialled");
+		expect(chart).toContain("reads **directly**");
+	});
+
+	it("ticket doctrine inherits the enriched shared bullet", () => {
+		const ticket = buildTicketDoctrine({ tracker: "github", repo: REPO, ticketRef: "42" });
+		expect(ticket).toContain("grills for its starting sources");
+		expect(ticket).toContain("external/credentialled");
+	});
+
+	it("chart doctrine does NOT gain the ticket-only research workflow section", () => {
+		const chart = buildChartDoctrine({ tracker: "github", repo: REPO });
+		expect(chart).not.toContain("### Research workflow");
+	});
+
+	it("spec doctrine gets no new research section", () => {
+		const spec = buildSpecDoctrine({ tracker: "github", repo: REPO, mapRef: "42" });
+		expect(spec).not.toContain("### Research workflow");
+	});
+
+	it("implement doctrine gets no new research section", () => {
+		const impl = buildImplementDoctrine({ tracker: "github", repo: REPO, ref: "74" });
+		expect(impl).not.toContain("### Research workflow");
+	});
+});
+
+describe("buildTicketDoctrine — research workflow", () => {
+	const doc = buildTicketDoctrine({ tracker: "github", repo: REPO, ticketRef: "42" });
+
+	it("carries the ticket-only ### Research workflow section", () => {
+		expect(doc).toContain("### Research workflow");
+	});
+
+	it("step 1 — checks for an existing ## Sources before grilling (confirm-once)", () => {
+		expect(doc).toContain("Check for an existing `## Sources`");
+		expect(doc).toContain("confirm once");
+		// confirm-once: the check for an existing ## Sources precedes the grill
+		expect(doc.indexOf("Check for an existing `## Sources`")).toBeLessThan(
+			doc.indexOf("Grill for external/credentialled"),
+		);
+	});
+
+	it("step 2 — grills external/credentialled sources one at a time with a recommended answer", () => {
+		expect(doc).toContain("Grill for external/credentialled");
+		expect(doc).toContain("one at a time");
+		expect(doc).toContain("recommended answer");
+	});
+
+	it("step 2 — pins sources only (doc URLs, external files, API endpoints, version/date bounds; no sub-questions, no output shape)", () => {
+		expect(doc).toContain("documentation URLs");
+		expect(doc).toContain("external repo/file paths");
+		expect(doc).toContain("API endpoints");
+		expect(doc).toContain("version/date bounds");
+		expect(doc).toContain("no sub-questions");
+		expect(doc).toContain("output shape");
+	});
+
+	it("step 2 — internal-sources carve-out (read directly, not grilled)", () => {
+		expect(doc).toContain("Repo-internal sources");
+		expect(doc).toContain("directly");
+	});
+
+	it("step 3 — records ## Sources before investigating", () => {
+		expect(doc).toContain("Record `## Sources`");
+		// the record step precedes the investigate step
+		expect(doc.indexOf("Record `## Sources`")).toBeLessThan(doc.indexOf("Investigate against"));
+	});
+
+	it("step 4 — hard gate refuses to investigate on an empty source set, via existing seams", () => {
+		expect(doc).toContain("Hard gate");
+		expect(doc).toContain("do not investigate");
+		// routes through the existing Blocked / Task / Not yet specified seams
+		expect(doc).toContain("Task");
+		expect(doc).toContain("Not yet specified");
+		expect(doc).toContain("No new state");
+	});
+
+	it("steps 5–6 — investigate against recorded sources, then resolve and graduate as normal", () => {
+		expect(doc).toContain("Investigate against");
+		expect(doc).toContain("Resolve and graduate");
+		expect(doc).toContain("## Answer");
+	});
+});
