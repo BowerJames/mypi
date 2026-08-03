@@ -135,7 +135,6 @@ profiles:
       - loop                   # repeat messages until a terminal condition
       - repo-explorer          # explore third-party codebases into a /tmp cache
       - overview               # repo overview and open issues
-    cmd: "pi --model claude-sonnet-4-20250514 --tools read,bash,edit,write,grep,find,ls"
 ```
 
 To override a built-in instead of adding a new name, define a profile with a
@@ -149,13 +148,12 @@ A **bundle** is a single unit that packages related pi-extensions, skills, and p
 |-------|-------------|
 | `default` | Profile to use when none is specified on the CLI. Optional — falls back to the `developer` built-in if unset or if the config file is absent. |
 | `profiles.<name>.bundles` | List of bundle names from mypi's library |
-| `profiles.<name>.cmd` | Base pi command to execute. Bundle resources are injected automatically. |
 
 Any additional arguments passed on the command line are appended to the command.
 
 ### How It Works
 
-`mypi` expands each named bundle to the on-disk paths declared in its manifest and injects the appropriate flags into your `cmd`:
+`mypi` expands each named bundle to the on-disk paths declared in its manifest and injects the appropriate flags into the `pi` command:
 
 - a bundle's pi-extensions → `-e <path>`
 - a bundle's skills → `--skill <path>`
@@ -163,7 +161,7 @@ Any additional arguments passed on the command line are appended to the command.
 
 A bundle may declare `dependencies`; those bundles are auto-activated and their resources are emitted **first** (dependencies before dependents), so a skill whose `SKILL.md` uses dynamic `!` blocks always has the `dynamic-skills` extension loaded by the time it expands. Dependencies are resolved transitively and **deduplicated across the whole command** — listing a dep explicitly, or two bundles sharing a dep, never double-loads an extension (which would double-register its handlers). See [Bundle dependencies](#bundle-dependencies).
 
-You control everything else (model, tools, thinking level, etc.) through the `cmd` field.
+You control everything else (model, tools, thinking level, etc.) with `pi`'s own flags on the `mypi` command line — they are forwarded to `pi` verbatim.
 
 Bundles live under `extension-bundles/<name>/` inside the installed package. Each bundle's `index.ts` manifest declares its resources as paths relative to itself, so they resolve wherever npm installs the package. A bundle may also declare `dependencies` (other bundle names); those are auto-activated alongside it — see [Bundle dependencies](#bundle-dependencies). `mypi --bundle <name>` applies the same expansion (see [Running pi directly](#running-pi-directly)).
 
