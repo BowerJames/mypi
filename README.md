@@ -184,7 +184,7 @@ mypi ships 12 **bundles**, each under `extension-bundles/<name>/`. Most contain 
 | `overview` | prompt | Overview of the repository, core components, and open issues |
 | `terminal-status` | pi-extension | Reflect session state in the terminal tab title — on `agent_start` sets the title to `working`, on `agent_settled` sets it to `idle`. Works in any terminal (TUI mode) by emitting the OSC 1 tab-title escape sequence (`\033]1;<title>\007`) to stdout. Best-effort: a failed write is swallowed. Note: pi's own window-title writes (OSC 0) can momentarily override the tab title on startup/session change |
 | `llm-wiki` | pi-extension | Turn the agent into a wiki manager for an [OKF](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) wiki (Karpathy's [LLM-wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)) — `/wiki-root`/`/wiki-spec` configure the bundle root and per-wiki spec doc (defaults `wiki/` and `/SPEC.md`), the spec is **auto-injected** into the system prompt each turn, `/wiki-init` scaffolds empty assets, and `/wiki-ingest`/`/wiki-query`/`/wiki-lint` inject the operating-model guidance |
-| `wayfinder` | pi-extension | Chart a large, foggy effort as a **map of decision tickets** on the issue tracker, resolving one at a time until the way to the destination is clear (inspired by [mattpocock/skills `wayfinder`](https://github.com/mattpocock/skills/tree/main/skills/engineering/wayfinder)). `/wayfinder` grills the destination and creates the map + frontier tickets; `/wayfinder <ticket-ref>` points a session at a ticket (the model auto-detects its type); `/to-spec <map-ref>` converts a closed map into a `wayfinder:spec` successor issue (PRD hand-off). Tracker is autodetected (GitHub/GitLab/local `/tmp/.wayfinder/<repo>/`), overridable via `cwd/.mypi/wayfinder-tracker.sh`. Five primitives: Map, Decision, Prototype (worktree under `~/.worktrees/`), Research (user-spawned), Task |
+| `wayfinder` | pi-extension | Chart a large, foggy effort as a **map of decision tickets** on the issue tracker, resolving one at a time until the way to the destination is clear (inspired by [mattpocock/skills `wayfinder`](https://github.com/mattpocock/skills/tree/main/skills/engineering/wayfinder)). `/wayfinder` grills the destination and creates the map + frontier tickets; `/wayfinder <ticket-ref>` points a session at a ticket (the model auto-detects its type); `/to-spec <map-ref>` converts a closed map into a `wayfinder:spec` successor issue (PRD hand-off). Tracker is autodetected (GitHub/GitLab/local `/tmp/.wayfinder/<repo>/`), overridable via `cwd/.mypi/wayfinder-tracker.sh`. Five primitives: Map, Decision, Prototype (worktree under `~/.worktrees/`), Research (user-spawned), Task. `/implement <ref>` turns a closed spec into merged, reviewed code — kickoff slices it into Development units (then cuts the `implement/<spec-slug>` trunk + creates the Implementation Map); working an open ticket drives Development → Code Review → Merge, with Follow-Up Development and Full Review. Six implementation primitives: Implementation Map, Development, Code Review, Follow-Up Development, Merge, Full Review |
 
 ### Bundle dependencies
 
@@ -422,6 +422,7 @@ wait and re-run once idle:
 | `/wayfinder` | Grill the destination, then create the map ticket and the primitive tickets for the frontier |
 | `/wayfinder <ticket-ref>` | Point this session at a specific ticket; the model auto-detects its primitive type and acts accordingly |
 | `/to-spec <map-ref>` | Convert a **closed** map into a `wayfinder:spec` **successor** issue — a PRD-style hand-off. Synthesises the map's Decisions + every closed child's resolution (+ codebase exploration) into the verbatim 7-section template, published in one shot (no confirm gate); re-run overwrites in place. Never writes the repo — the spec lives only as the issue body |
+| `/implement <ref>` | Turn a **closed** `wayfinder:spec` into merged, reviewed code. Auto-disambiguates: a closed spec → **kickoff** (propose a slicing, then on confirm cut the `implement/<spec-slug>` trunk + create the Implementation Map and Development children); any open implementation ticket → **work** it through its lifecycle (Development → Code Review → Merge, with Follow-Up Development and Full Review). Reviews are in-band (active-session model, user gate). Writes the repo (branches/merges) on all trackers |
 
 **Five primitives** (each a child issue of the `wayfinder:map` parent, or a
 `Type:` line locally):
@@ -461,9 +462,29 @@ from durable inputs only (the map's Decisions + every closed child's resolution
 research findings as a digest so the spec is self-contained, and publishes in
 one shot with **no confirm gate**; re-running overwrites the spec body in place
 (same successor link, stable URL). The spec lives **only** as the issue body —
-it never writes the repo (no `docs/specs/` mirror). This ends the wayfinder
-stage; splitting the spec into implementation tickets (`to-tickets`) and
-building it are downstream and out of scope.
+it never writes the repo (no `docs/specs/` mirror). This is the spec hand-off — `/implement` takes it from there.
+
+**Spec → implementation stage.** `/implement <ref>` turns a closed `wayfinder:spec` into merged, reviewed code — a third one-shot doctrine injector (same clear-then-inject, stateless) that auto-disambiguates by the reference it is given:
+
+- **`/implement <closed-spec-ref>` → kickoff.** Reads the spec, proposes a coarse slicing into independent Development units + an ordering, and waits for a yes/no. Nothing is created until confirmed; on confirm it cuts the per-effort integration trunk `implement/<spec-slug>` **from the current branch** (recorded in the Implementation Map as the base), then creates the Implementation Map, the Development children, and a Full Review child.
+- **`/implement <open-ticket-ref>` → work.** Dispatches by primitive type per a transition table: Development (switch to the unit's worktree+branch, do the work, commit, spawn a Code Review); Code Review (in-band review, findings + non-binding recommendation, then a user gate: approve → Merge, rework → Follow-Up Development); Follow-Up Development (rework on the parent Dev's branch, then re-review); Merge (`git merge --no-ff` into the trunk, cleanup, close the Dev); Full Review (review the integrated trunk vs the full spec; approve → close the map and leave the trunk→base merge to the user; rework → fresh Development children).
+
+**Six implementation primitives** (each a child of the `wayfinder:implementation-map` parent):
+
+| Primitive | Label | Closed when |
+|-----------|-------|-------------|
+| **Implementation Map** | `wayfinder:implementation-map` | A passing Full Review (it and all children closed) |
+| **Development** | `wayfinder:development` | Merged (the unit anchor Merge consumes) |
+| **Code Review** | `wayfinder:code-review` | Self, at its approve/rework gate |
+| **Follow-Up Development** | `wayfinder:follow-up-development` | Self, once its rework is committed |
+| **Merge** | `wayfinder:merge` | Self, after landing the unit on the trunk |
+| **Full Review** | `wayfinder:full-review` | A final approve (closes itself + the map) |
+
+**Branching.** One namespace keyed on the spec slug: trunk `implement/<spec-slug>` (cut from the current branch at kickoff, recorded as the base); dev-unit branch `dev/<spec-slug>/<n>-<slug>`; dev-unit worktree `~/.worktrees/<spec-slug>/<n>-<slug>` (materialised lazily, only when a unit starts). `<n>` is the raw ticket number (no padding). Merges are non-fast-forward; a hard conflict halts in place (never `--ours`/`--theirs`/`--abort`, never commits markers).
+
+**Reviews are in-band doctrine** — the agent becomes the reviewer for one turn using the active session model (switch with `/model`), posts findings + a non-binding recommendation, and stops; pass/fail is always a user gate. The standalone `code-review`/`code-review-prompt` bundles are deliberately not reused.
+
+Unlike `/to-spec`, `/implement` **writes the repo** (branches/merges) on all three trackers. On the local tracker, tickets are ephemeral scratch under `/tmp/.wayfinder/<repo>/` and the merged branch in cwd is the sole durable record of a finished effort. The final trunk→base merge is the user's (Full Review approves; it does not land).
 
 ## Development
 

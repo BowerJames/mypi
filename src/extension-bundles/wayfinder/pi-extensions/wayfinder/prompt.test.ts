@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
 	buildChartDoctrine,
+	buildImplementDoctrine,
 	buildSpecDoctrine,
 	buildTicketDoctrine,
+	implementTrackerOpsSection,
 	specTrackerOpsSection,
 	trackerOpsSection,
 } from "./prompt.js";
@@ -169,6 +171,174 @@ describe("specTrackerOpsSection", () => {
 	});
 });
 
+describe("buildImplementDoctrine", () => {
+	const doc = buildImplementDoctrine({ tracker: "github", repo: REPO, ref: "74" });
+
+	it("announces the implement flow and embeds the ref", () => {
+		expect(doc).toContain("## Wayfinder — implement a closed spec");
+		expect(doc).toContain("You are running `/implement 74`");
+	});
+
+	it("lists all six implementation primitives and their labels", () => {
+		expect(doc).toContain("**Implementation Map**");
+		expect(doc).toContain("**Development**");
+		expect(doc).toContain("**Code Review**");
+		expect(doc).toContain("**Follow-Up Development**");
+		expect(doc).toContain("**Merge**");
+		expect(doc).toContain("**Full Review**");
+		expect(doc).toContain("wayfinder:implementation-map");
+		expect(doc).toContain("wayfinder:development");
+		expect(doc).toContain("wayfinder:code-review");
+		expect(doc).toContain("wayfinder:follow-up-development");
+		expect(doc).toContain("wayfinder:merge");
+		expect(doc).toContain("wayfinder:full-review");
+	});
+
+	it("keeps the implementation map distinct from the planning map", () => {
+		expect(doc).toContain("from the planning `wayfinder:map`");
+	});
+
+	it("encodes the disambiguation + implementation-map redirect error", () => {
+		expect(doc).toContain("auto-disambiguates");
+		expect(doc).toContain("closed");
+		expect(doc).toContain("kickoff");
+		expect(doc).toContain("redirect to the frontier Development ticket");
+	});
+
+	it("encodes the kickoff propose-then-create flow", () => {
+		expect(doc).toContain("Propose-then-create");
+		expect(doc).toContain("wait for a yes/no");
+		expect(doc).toContain("Nothing is created until confirmed");
+		expect(doc).toContain("Eligibility gate");
+		expect(doc).toContain("refuse-and-name");
+	});
+
+	it("slices coarse-by-default and avoids inter-unit blocking", () => {
+		expect(doc).toContain("Coarse-by-default slicing");
+		expect(doc).toContain("genuine file/seam independence");
+		expect(doc).toContain("no inter-unit blocking dependencies are wired");
+	});
+
+	it("encodes the transition table's per-primitive rules", () => {
+		// each primitive's complete / spins-off / closes row
+		expect(doc).toContain("switch to its worktree+branch, do the work, commit");
+		expect(doc).toContain("approve → Merge");
+		expect(doc).toContain("rework → Follow-Up Development");
+		expect(doc).toContain("reuse the parent Dev's branch + worktree");
+		expect(doc).toContain("merge unit branch → root");
+		expect(doc).toContain("close map + self");
+	});
+
+	it("states the closure rules (single-owner, no orphans)", () => {
+		expect(doc).toContain("Closure rules");
+		expect(doc).toContain("self-closes at its gate");
+		expect(doc).toContain("stays open until Merge");
+		expect(doc).toContain("closes only at Full Review");
+	});
+
+	it("uses soft-doctrine eligibility guards, never native blocked_by in the lifecycle", () => {
+		expect(doc).toContain("no native `blocked_by` inside the lifecycle");
+		expect(doc).toContain("Blocked by: all other implementation tickets closed");
+		expect(doc).toContain("Blocked by: commits on <dev-branch>");
+	});
+
+	it("encodes the branching namespace keyed on the spec slug", () => {
+		expect(doc).toContain("implement/<spec-slug>");
+		expect(doc).toContain("dev/<spec-slug>/<n>-<slug>");
+		expect(doc).toContain("~/.worktrees/<spec-slug>/<n>-<slug>");
+		expect(doc).toContain("git branch | grep <spec-slug>");
+	});
+
+	it("cuts the trunk from the CURRENT branch at kickoff, recorded in the map (not mode's root-branch)", () => {
+		expect(doc).toContain("cut from the current branch at kickoff");
+		expect(doc).toContain("Base branch:");
+		expect(doc).toContain("persisted `/root-branch`");
+	});
+
+	it("uses a raw ticket number (no zero-padding) in the namespace", () => {
+		expect(doc).toContain("raw (no zero-padding)");
+	});
+
+	it("materialises dev branches/worktrees lazily", () => {
+		expect(doc).toContain("Lazy materialisation");
+		expect(doc).toContain("materialised only when");
+		expect(doc).toContain("git worktree add");
+	});
+
+	it("encodes the merge rules (non-fast-forward, guarded delete, push, conflict policy)", () => {
+		expect(doc).toContain("git merge --no-ff");
+		expect(doc).toContain("git branch -d");
+		expect(doc).toContain("git worktree remove");
+		expect(doc).toContain("push the trunk");
+		expect(doc).toContain("halt and ask, never guess");
+		expect(doc).toContain("leave the merge in-progress");
+		expect(doc).toContain("git merge --abort");
+		expect(doc).toContain("--ours");
+		expect(doc).toContain("--theirs");
+		expect(doc).toContain("commit while conflict markers remain");
+	});
+
+	it("encodes the in-band review mechanism (no subprocess, active-session model, user gate)", () => {
+		expect(doc).toContain("in-band doctrine injection");
+		expect(doc).toContain("No subprocess is spawned");
+		expect(doc).toContain("code-review-prompt");
+		expect(doc).toContain("are not reused");
+		expect(doc).toContain("active session model");
+		expect(doc).toContain("non-binding recommendation");
+		expect(doc).toContain("approve or rework");
+	});
+
+	it("encodes the Full Review eligibility, pass-action, and rework loop", () => {
+		expect(doc).toContain("leave the root→base merge to the user");
+		expect(doc).toContain("fresh Development children");
+		expect(doc).toContain("Full Review");
+		expect(doc).toContain("Trunk: implement/<spec-slug>");
+	});
+
+	it("encodes the local-tracker split and the repo-writing inversion vs /to-spec", () => {
+		expect(doc).toContain("Two stores: ephemeral tickets, real repo");
+		expect(doc).toContain("merged branch in cwd");
+		expect(doc).toContain("must write the repo");
+		expect(doc).toContain("INVERSION vs `/to-spec`");
+	});
+
+	it("carries the refer-by-name rule", () => {
+		expect(doc).toContain("Refer by name");
+		expect(doc).toContain("title");
+	});
+
+	it("does not leak the repo slug into the hosted trackers", () => {
+		expect(doc).not.toContain(`/tmp/.wayfinder/${REPO}/`);
+	});
+});
+
+describe("implementTrackerOpsSection", () => {
+	it("selects GitHub implement ops", () => {
+		const ops = implementTrackerOpsSection("github", REPO);
+		expect(ops).toContain("GitHub Issues (implement)");
+		expect(ops).toContain("gh issue create --label wayfinder:implementation-map");
+		expect(ops).toContain("gh issue create --label wayfinder:development");
+		expect(ops).toContain("gh issue create --label wayfinder:full-review");
+		expect(ops).not.toContain("/tmp/.wayfinder/");
+	});
+
+	it("selects GitLab implement ops", () => {
+		const ops = implementTrackerOpsSection("gitlab", REPO);
+		expect(ops).toContain("GitLab Issues (implement)");
+		expect(ops).toContain("glab issue create --label wayfinder:implementation-map");
+		expect(ops).toContain("glab issue create --label wayfinder:development");
+		expect(ops).not.toContain("gh issue");
+	});
+
+	it("selects local implement ops and templates in the repo slug", () => {
+		const ops = implementTrackerOpsSection("local", REPO);
+		expect(ops).toContain("Local Markdown (implement)");
+		expect(ops).toContain(`/tmp/.wayfinder/${REPO}/`);
+		expect(ops).toContain("implement-map.md");
+		expect(ops).toContain("Type: implementation-map");
+	});
+});
+
 describe("doctrine round-trips per tracker", () => {
 	for (const tracker of ["local", "github", "gitlab"] as const) {
 		it(`chart doctrine selects ${tracker} ops`, () => {
@@ -189,6 +359,13 @@ describe("doctrine round-trips per tracker", () => {
 			const doc = buildSpecDoctrine({ tracker, repo: REPO, mapRef: "42" });
 			if (tracker === "github") expect(doc).toContain("spec synthesis");
 			if (tracker === "gitlab") expect(doc).toContain("spec synthesis");
+			if (tracker === "local") expect(doc).toContain(`/tmp/.wayfinder/${REPO}/`);
+		});
+
+		it(`implement doctrine selects ${tracker} ops`, () => {
+			const doc = buildImplementDoctrine({ tracker, repo: REPO, ref: "74" });
+			if (tracker === "github") expect(doc).toContain("GitHub Issues (implement)");
+			if (tracker === "gitlab") expect(doc).toContain("GitLab Issues (implement)");
 			if (tracker === "local") expect(doc).toContain(`/tmp/.wayfinder/${REPO}/`);
 		});
 	}
