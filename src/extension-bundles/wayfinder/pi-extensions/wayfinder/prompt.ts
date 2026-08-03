@@ -51,7 +51,7 @@ Every ticket is one of five primitive types — each carries a \`wayfinder:<type
 - **Wayfinder Map** (\`wayfinder:map\` / \`Type: map\`) — the index: Destination · Notes · Decisions so far · Not yet specified · Out of scope. It gists and links; each decision lives in exactly one place — its ticket. Closed only when the map **and** every child ticket is closed.
 - **Decision** (\`wayfinder:decision\` / \`Type: decision\`) — resolve a decision. Worked by grilling the user one question at a time, with a recommended answer for each; you never answer for the human. Closed when the decision is made.
 - **Prototype** (\`wayfinder:prototype\` / \`Type: prototype\`) — raise the fidelity of the discussion with a cheap, rough artifact the user can react to (an outline, a stub, UI/logic code). Scaffold a worktree at \`~/.worktrees/<map-slug>/<ticket-slug>/\` and build there. Closed when the user confirms a design, **or** new primitives are spun off to push the fog back further.
-- **Research** (\`wayfinder:research\` / \`Type: research\`) — investigate a question against **primary sources** (official docs, source code, specs, first-party APIs) and capture the findings. Closed when the fog is pushed back enough that the correct new primitives can be created. (Research sessions are **not** auto-launched — the user spawns a session and points it at the ticket, like any other.)
+- **Research** (\`wayfinder:research\` / \`Type: research\`) — investigate a question against **primary sources** (official docs, source code, specs, first-party APIs) and capture the findings. When a Research ticket is *worked*, it first **grills for its starting sources** — the **external/credentialled** entry points the agent can't reach itself (documentation URLs, external repo/file paths, API endpoints with credentials, version/date bounds) — records them on the ticket, then investigates against them; repo-internal sources (its own code, specs, configs) it reads **directly**, not grilled. Closed when the fog is pushed back enough that the correct new primitives can be created. (Research sessions are **not** auto-launched — the user spawns a session and points it at the ticket, like any other.)
 - **Task** (\`wayfinder:task\` / \`Type: task\`) — manual work that must happen *before* a decision can be made (provision access, sign up for a service so its API can be judged, move data so its shape can be seen). Nothing to decide, prototype, or research, but the discussion is blocked until it's done. Drive it yourself where you can; otherwise hand the user a precise checklist. Closed when the work is done; the resolution records what was done and any resulting facts (credentials location, new URLs, row counts).`;
 
 const DOCTRINE_PREAMBLE = `### Plan, don't do
@@ -78,6 +78,24 @@ To pin down a destination or resolve a Decision ticket, grill the user **relentl
 - If a *fact* can be found by exploring the environment (filesystem, \`gh\`/\`glab\`, docs), look it up rather than asking. The *decisions* are the user's — put each one to them and wait.
 - For the chart flow, go **breadth-first**: fan out across the whole space rather than deep on any one thread.
 - Don't act until you've reached a shared understanding.`;
+
+/**
+ * The ticket-only Research workflow. Appended to the ticket doctrine (alongside
+ * the Primitives / plan-fog-refer-by-name / grilling / tracker-ops sections) —
+ * **not** the chart, spec, or implement doctrines. Sources are grilled and
+ * recorded *before* investigation; an empty source set is a hard gate that
+ * routes through the existing Blocked / Task / *Not yet specified* seams.
+ */
+const RESEARCH_WORKFLOW_SECTION = `### Research workflow
+
+A Research ticket is worked in a fixed order — **sources before investigation**:
+
+1. **Check for an existing \`## Sources\`.** Read the ticket body (and its comments). If a \`## Sources\` heading already exists, the sourcing has been done — **confirm once** that it is still the intended set, then skip to step 5. A re-run never re-grills.
+2. **Grill for external/credentialled entry points, one at a time.** Ask the user **one** question at a time, each with a **recommended answer**, for the entry points you can't reach yourself: documentation URLs; external repo/file paths; API endpoints (with any credentials, or where to find them); version/date bounds. These are **sources only** — the research *question* stays as written; ask no sub-questions, and pin no output shape. Repo-internal sources (your own code, specs, configs) you read **directly** — never grill for them. (Reuse the one-question-at-a-time, recommended-answer style from the Decision grilling above.)
+3. **Record \`## Sources\`.** Write the agreed sources to the ticket as a \`## Sources\` section (a \`##\`-headed section paralleling the existing \`## Answer\` resolution heading), **before** any investigation — so the agent commits to a source set rather than drifting mid-investigation. On a hosted tracker every comment is read, so \`## Sources\` flows to the downstream spec stage with no extra wiring.
+4. **Hard gate — refuse to investigate on an empty source set.** If no external/credentialled source is supplied, **do not investigate**. Instead record the ticket **blocked** and push it forward through the existing seams — suggest a **Task** (gather candidate resources), or move the question to the map's *Not yet specified*. No new state: this reuses the existing Blocked / Task / *Not yet specified* machinery.
+5. **Investigate against the recorded sources.** Now research the question against the recorded \`## Sources\`, reading each one and capturing the findings.
+6. **Resolve and graduate as normal.** Post the findings as an \`## Answer\` (the resolution heading), close the ticket, and append a one-line pointer to the map's *Decisions so far*. Graduate any newly-specifiable fog into fresh tickets (create-then-wire); clear each graduated patch from *Not yet specified*.`;
 
 // ---------------------------------------------------------------------------
 // Tracker operations
@@ -210,6 +228,8 @@ export function buildTicketDoctrine(input: TicketDoctrineInput): string {
 		DOCTRINE_PREAMBLE,
 		"",
 		GRILLING_SECTION,
+		"",
+		RESEARCH_WORKFLOW_SECTION,
 		"",
 		trackerOpsSection(input.tracker, input.repo),
 	].join("\n");
