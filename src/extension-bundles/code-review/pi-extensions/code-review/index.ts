@@ -2,7 +2,7 @@
  * Code Review Extension
  *
  * Appends a "Code Review" section to the system prompt that instructs the
- * agent to run an independent review (via `mypi run -p ... --prompt-template
+ * agent to run an independent review (via `mypi -p ... --prompt-template
  * code-review`) before opening a pull request. The recommended review model is
  * configurable via `/code-review-model` and persisted across sessions; when no
  * model is configured, the active session model is used as a fallback.

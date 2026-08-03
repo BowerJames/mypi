@@ -78,36 +78,36 @@ mypi --profile fullstack "Fix the auth bug"
 mypi
 
 # Run pi directly with bundle expansion (no profile/config needed)
-mypi run -p --model zai/glm-5.2 --bundle mode "Summarize this repo"
-mypi run --help
+mypi -p --model zai/glm-5.2 --bundle mode "Summarize this repo"
+mypi --help
 
 # Interactive config editor
 mypi configure
 mypi configure --help
 ```
 
-## Running pi directly (`mypi run`)
+## Running pi directly
 
-`mypi run` forwards every argument to `pi` with no profile or config required — handy when you just want one of mypi's bundles ad hoc:
+With no `--profile`, `mypi` forwards every argument to `pi` with no profile or config required — handy when you just want one of mypi's bundles ad hoc:
 
 ```bash
 # Expand a bundle's pi-extensions/skills/prompts into pi flags
-mypi run -p --model zai/glm-5.2 --bundle mode "Summarize this repo"
+mypi -p --model zai/glm-5.2 --bundle mode "Summarize this repo"
 # -> pi -p --model zai/glm-5.2 -e <mypi>/extension-bundles/mode/pi-extensions/mode/index.ts "Summarize this repo"
 
 # Multiple bundles, and prompt-only / skill-only bundles, all work the same way
-mypi run -p --bundle repo-explorer --bundle code-review-prompt
+mypi -p --bundle repo-explorer --bundle code-review-prompt
 
-mypi run --help
+mypi --help
 ```
 
 `--bundle <name>` (and the `--bundle=<name>` form) is expanded into that bundle's pi flags (`-e`/`--skill`/`--prompt-template`). Anything else is passed through untouched:
 
 - Multiple `--bundle` flags are allowed; each expands independently.
 - Path-like `-e ./local.ts` and other pi flags are forwarded as-is.
-- Everything else after `run` is sent straight to `pi`.
+- Everything else is sent straight to `pi`.
 
-`mypi run` uses no profiles, reads no `mypi-config.yaml`, and interprets no mypi-specific flags other than `--bundle`.
+With no `--profile`, `mypi` uses no profiles, reads no `mypi-config.yaml`, and interprets no mypi-specific flags other than `--bundle`.
 
 ## Configuration
 
@@ -135,7 +135,6 @@ profiles:
       - loop                   # repeat messages until a terminal condition
       - repo-explorer          # explore third-party codebases into a /tmp cache
       - overview               # repo overview and open issues
-    cmd: "pi --model claude-sonnet-4-20250514 --tools read,bash,edit,write,grep,find,ls"
 ```
 
 To override a built-in instead of adding a new name, define a profile with a
@@ -149,13 +148,12 @@ A **bundle** is a single unit that packages related pi-extensions, skills, and p
 |-------|-------------|
 | `default` | Profile to use when none is specified on the CLI. Optional — falls back to the `developer` built-in if unset or if the config file is absent. |
 | `profiles.<name>.bundles` | List of bundle names from mypi's library |
-| `profiles.<name>.cmd` | Base pi command to execute. Bundle resources are injected automatically. |
 
 Any additional arguments passed on the command line are appended to the command.
 
 ### How It Works
 
-`mypi` expands each named bundle to the on-disk paths declared in its manifest and injects the appropriate flags into your `cmd`:
+`mypi` expands each named bundle to the on-disk paths declared in its manifest and injects the appropriate flags into the `pi` command:
 
 - a bundle's pi-extensions → `-e <path>`
 - a bundle's skills → `--skill <path>`
@@ -163,9 +161,9 @@ Any additional arguments passed on the command line are appended to the command.
 
 A bundle may declare `dependencies`; those bundles are auto-activated and their resources are emitted **first** (dependencies before dependents), so a skill whose `SKILL.md` uses dynamic `!` blocks always has the `dynamic-skills` extension loaded by the time it expands. Dependencies are resolved transitively and **deduplicated across the whole command** — listing a dep explicitly, or two bundles sharing a dep, never double-loads an extension (which would double-register its handlers). See [Bundle dependencies](#bundle-dependencies).
 
-You control everything else (model, tools, thinking level, etc.) through the `cmd` field.
+You control everything else (model, tools, thinking level, etc.) with `pi`'s own flags on the `mypi` command line — they are forwarded to `pi` verbatim.
 
-Bundles live under `extension-bundles/<name>/` inside the installed package. Each bundle's `index.ts` manifest declares its resources as paths relative to itself, so they resolve wherever npm installs the package. A bundle may also declare `dependencies` (other bundle names); those are auto-activated alongside it — see [Bundle dependencies](#bundle-dependencies). `mypi run` applies the same expansion via `--bundle` (see [Running pi directly](#running-pi-directly-mypi-run)).
+Bundles live under `extension-bundles/<name>/` inside the installed package. Each bundle's `index.ts` manifest declares its resources as paths relative to itself, so they resolve wherever npm installs the package. A bundle may also declare `dependencies` (other bundle names); those are auto-activated alongside it — see [Bundle dependencies](#bundle-dependencies). `mypi --bundle <name>` applies the same expansion (see [Running pi directly](#running-pi-directly)).
 
 ## Bundled Resources
 
@@ -188,7 +186,7 @@ mypi ships 12 **bundles**, each under `extension-bundles/<name>/`. Most contain 
 
 ### Bundle dependencies
 
-Bundles are **composable**: a bundle's manifest may declare a `dependencies` field (a list of other bundle names). When you select a bundle — via a profile's `bundles` list or `mypi run --bundle <name>` — mypi **auto-activates its full transitive dependency closure**, so you only ever name the bundles you actually want.
+Bundles are **composable**: a bundle's manifest may declare a `dependencies` field (a list of other bundle names). When you select a bundle — via a profile's `bundles` list or `mypi --bundle <name>` — mypi **auto-activates its full transitive dependency closure**, so you only ever name the bundles you actually want.
 
 Resolution rules:
 
@@ -235,7 +233,7 @@ The `code-review` bundle moves the pre-PR review guidance out of shared `AGENTS.
 - Appends a "## Code Review" section to the system prompt each turn, instructing the agent to run an independent review before opening a pull request:
 
   ```
-  mypi run -p --model <model> --tools read,grep,find,ls --bundle code-review-prompt "/code-review <issue_number> <branch_to_review> <target_branch_of_pr>"
+  mypi -p --model <model> --tools read,grep,find,ls --bundle code-review-prompt "/code-review <issue_number> <branch_to_review> <target_branch_of_pr>"
   ```
 
   The review runs with read-only tools (`read,grep,find,ls`) for defense-in-depth, even though the `code-review-prompt` prompt itself instructs the reviewer never to apply fixes.
@@ -243,7 +241,7 @@ The `code-review` bundle moves the pre-PR review guidance out of shared `AGENTS.
 - Falls back to the **active session model** (`provider/id`) when no model is configured, so the guidance appears out of the box.
 - Shows a `🔍 review:` status indicator in the footer: the explicitly-configured model in the accent color, and the active-fallback model in a warning color (prefixed `(active)`).
 
-Because the review subprocess is launched via `mypi run --bundle code-review-prompt` (the prompt-only bundle, which loads no extension), the reviewer agent does not re-append this section — only the interactive session that enables the `code-review` bundle sees the guidance.
+Because the review subprocess is launched via `mypi --bundle code-review-prompt` (the prompt-only bundle, which loads no extension), the reviewer agent does not re-append this section — only the interactive session that enables the `code-review` bundle sees the guidance.
 
 ### btw
 
@@ -346,7 +344,7 @@ automatically as a dependency):
 
 ```bash
 mypi --profile llm-wiki
-mypi run --bundle llm-wiki   # ad hoc, no profile/config needed
+mypi --bundle llm-wiki   # ad hoc, no profile/config needed
 ```
 
 **Two configurable values** (set via slash commands, persisted across
@@ -407,7 +405,7 @@ the `mode` and `repo-explorer` bundles:
 
 ```bash
 mypi --profile wayfinder
-mypi run --bundle wayfinder   # ad hoc, no profile/config needed
+mypi --bundle wayfinder   # ad hoc, no profile/config needed
 ```
 
 **Commands** (all three one-shot doctrine injectors — no persisted state, no

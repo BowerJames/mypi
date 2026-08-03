@@ -24,10 +24,15 @@ export interface ResolvedBundle {
 	prompts: string[];
 }
 
+/**
+ * A profile is a **named bundle-set**: an optional list of bundle names that
+ * mypi expands and runs under `pi`. The merged `mypi` always runs `pi`, so the
+ * per-profile `cmd` field is gone — a profile only selects which bundles are
+ * active. A profile with no bundles runs bare `pi`.
+ */
 export interface Profile {
-	/** Bundles to load, by name. */
+	/** Bundles to load, by name (deps-first, cross-union-deduped at expand time). */
 	bundles?: string[];
-	cmd: string;
 }
 
 /**

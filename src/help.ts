@@ -13,33 +13,43 @@ export function hasHelpFlag(args: string[]): boolean {
 // Help text
 // ---------------------------------------------------------------------------
 
-const MAIN_HELP = `\
-mypi - Profile-based launcher for pi
+const MAIN_HELP_TEXT = `\
+mypi - Profile-based launcher for pi (always runs pi)
 
 USAGE
-  mypi [options] [--profile <name>] [args...]
-  mypi run [pi options...] [messages...]
-  mypi init [options]
-  mypi configure [options]
+  mypi [--profile <name>] [--bundle <name>]... [pi options...] [messages...]
+  mypi init
+  mypi configure
+
+mypi always runs pi. Use --profile to launch a saved bundle-set, --bundle to add
+bundles ad hoc, or both to augment a profile. Everything else - -p, --model,
+-e ./local.ts, @files, positional messages - forwards to pi verbatim.
+
+EXAMPLES
+  mypi                                                launch the default profile
+  mypi --profile reviewer                             launch a saved bundle-set
+  mypi --bundle code-review-prompt                    ad-hoc bundle (no profile, no config)
+  mypi --profile developer --bundle btw               augment a profile with a bundle
+  mypi -p --model <m> --bundle code-review-prompt "<msg>"   full passthrough form
 
 COMMANDS
-  run           Run pi with bundle expansion
   init          Create a default mypi-config.yaml
   configure     Interactive config editor
 
 OPTIONS
   --profile <name>   Use the named profile (default from config, else 'developer')
+  --bundle <name>    Expand a bundle's pi flags (-e/--skill/--prompt-template).
+                     Repeatable. With no --profile, loads no config (ad-hoc).
   -h, --help         Show help
 
-Built-in profiles (developer, reviewer, llm-wiki, wayfinder) are always available with no
-mypi-config.yaml. The config file is an optional overlay: add/override
-profiles and optionally set 'default'. Run 'mypi configure' to edit it.
-
-Profiles reference bundles by name rather than configuring individual
-extensions/skills/prompts. Run 'mypi configure' to edit bundles.
-
-Run 'mypi <command> --help' for more information on a command.
+Built-in profiles (developer, reviewer, llm-wiki, wayfinder) are always
+available with no mypi-config.yaml; each is a named bundle-set. The config file
+is an optional overlay: add/override profiles and optionally set 'default'.
+Run 'mypi configure' to edit it.
 `;
+
+/** The main help text (exported so its surface can be asserted in tests). */
+export const MAIN_HELP = MAIN_HELP_TEXT;
 
 const INIT_HELP = `\
 mypi init - Create a default mypi-config.yaml
@@ -72,40 +82,12 @@ OPTIONS
   -h, --help         Show help
 `;
 
-const RUN_HELP = `\
-mypi run - Run pi with bundle expansion
-
-USAGE
-  mypi run [pi options...] [--bundle <name>]... [messages...]
-
-Forwards every argument to pi. mypi's --bundle <name> flag is expanded to
-that bundle's pi resource flags (-e/--skill/--prompt-template):
-
-  mypi run -p --bundle code-review-prompt
-  -> pi -p --prompt-template <mypi>/extension-bundles/code-review-prompt/prompts/code-review.md
-
-Multiple --bundle flags are allowed; each expands independently.
---bundle=<name> (equals form) is also recognised.
-
-Everything else is forwarded verbatim — including path-like -e ./local.ts,
-other pi flags, and positional messages.
-
-No mypi-config.yaml is required. mypi run uses no profiles and interprets no
-mypi-specific flags other than --bundle; everything after 'run' is forwarded
-to pi.
-
-OPTIONS
-  -h, --help         Show help
-
-Run 'pi --help' for pi's options.
-`;
-
 // ---------------------------------------------------------------------------
 // Print & exit helpers
 // ---------------------------------------------------------------------------
 
 export function printMainHelp(): never {
-	console.log(MAIN_HELP);
+	console.log(MAIN_HELP_TEXT);
 	process.exit(0);
 }
 
@@ -116,10 +98,5 @@ export function printInitHelp(): never {
 
 export function printConfigureHelp(): never {
 	console.log(CONFIGURE_HELP);
-	process.exit(0);
-}
-
-export function printRunHelp(): never {
-	console.log(RUN_HELP);
 	process.exit(0);
 }
