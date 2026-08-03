@@ -199,10 +199,61 @@ async function manifestDeps(name: string): Promise<string[]> {
 
 /**
  * Resolve a single bundle's activation order from on-disk manifests: its full
- * transitive dependency closure, deps-first. Production callers
- * (`buildResourceParts`, `resolveRunArgs`) deduplicate the union across all
- * bundles they process.
+ * transitive dependency closure, deps-first. The shared `expandBundleArgs`
+ * expander deduplicates the union across all bundles it processes.
  */
 export async function bundleActivationOrder(name: string): Promise<string[]> {
 	return activationOrder(name, manifestDeps);
+}
+
+// ---------------------------------------------------------------------------
+// Shared expansion — the single seam for bundle → pi-flag expansion
+// ---------------------------------------------------------------------------
+
+/** pi flags emitted for each bundle facet, in stable per-bundle order. */
+const PI_EXTENSION_FLAG = "-e";
+const PI_SKILL_FLAG = "--skill";
+const PI_PROMPT_FLAG = "--prompt-template";
+
+/**
+ * Expand an ordered list of bundle names into deps-first, cross-union-deduped
+ * pi-flag parts (`-e` / `--skill` / `--prompt-template`).
+ *
+ * This is the **single seam** for the bundle-expansion concern. All three
+ * input shapes — a profile's `bundles`, CLI `--bundle` flags, or the union of
+ * both — feed this one expander; nothing duplicates the dedup or ordering
+ * afterwards. A wide implementation (transitive-dependency topological sort +
+ * cross-union dedup + per-bundle facet emission) behind a narrow interface.
+ *
+ * Bundles are processed in the given order. Each bundle's full transitive
+ * dependency closure (`bundleActivationOrder`) is emitted **deps-first**, and a
+ * bundle (or shared transitive dependency) already emitted is skipped — so a
+ * dependency shared across the union is emitted exactly once, at its first
+ * occurrence. Within each bundle, facets are emitted in a stable order:
+ * pi-extensions (`-e`) → skills (`--skill`) → prompts (`--prompt-template`).
+ */
+export async function expandBundleArgs(bundleNames: string[]): Promise<string[]> {
+	const parts: string[] = [];
+	const emitted = new Set<string>();
+
+	for (const name of bundleNames) {
+		for (const activationName of await bundleActivationOrder(name)) {
+			if (emitted.has(activationName)) continue;
+			emitted.add(activationName);
+
+			const resolved = await expandBundle(activationName);
+
+			for (const path of resolved.piExtensions) {
+				parts.push(PI_EXTENSION_FLAG, path);
+			}
+			for (const path of resolved.skills) {
+				parts.push(PI_SKILL_FLAG, path);
+			}
+			for (const path of resolved.prompts) {
+				parts.push(PI_PROMPT_FLAG, path);
+			}
+		}
+	}
+
+	return parts;
 }

@@ -228,7 +228,6 @@ function displayConfig(overlay: UserConfig): void {
 }
 
 function displayProfile(profile: Profile): void {
-	console.log(`  cmd: "${profile.cmd}"`);
 	console.log(`  bundles: ${formatList(profile.bundles ?? [])}`);
 }
 
@@ -359,14 +358,10 @@ async function addProfile(
 		}
 	}
 
-	const cmd = await promptRequired(rl, "cmd: ", isCancelled);
 	const bundles = await promptMultiSelect(rl, "Bundles", discoverBundles(), [], isCancelled);
 
 	if (!overlay.profiles) overlay.profiles = {};
-	overlay.profiles[name] = {
-		cmd,
-		...(bundles.length > 0 && { bundles }),
-	};
+	overlay.profiles[name] = bundles.length > 0 ? { bundles } : {};
 
 	const setDefault = await promptYesNo(rl, `Set "${name}" as the default profile?`, isCancelled);
 	if (setDefault) {
@@ -439,10 +434,7 @@ async function editProfile(
 		// Built-in, not yet overridden → materialise an override copy.
 		const builtin = BUILTIN_PROFILES[name];
 		if (!overlay.profiles) overlay.profiles = {};
-		overlay.profiles[name] = {
-			cmd: builtin.cmd,
-			...(builtin.bundles ? { bundles: [...builtin.bundles] } : {}),
-		};
+		overlay.profiles[name] = builtin.bundles ? { bundles: [...builtin.bundles] } : {};
 		console.log(`\n  Materialised a user override of built-in "${name}" for editing.`);
 	}
 
@@ -453,25 +445,13 @@ async function editProfile(
 		const annotation = profileAnnotation(name, overlay);
 		console.log(`\n  Editing profile: ${name} ${annotation}`);
 		displayProfile(profile);
-		console.log("\n  1. Edit cmd");
-		console.log("  2. Edit bundles");
-		console.log("  3. Back\n");
+		console.log("\n  1. Edit bundles");
+		console.log("  2. Back\n");
 
 		const choice = await promptRequired(rl, "Choose an option: ", isCancelled);
 
 		switch (choice) {
 			case "1": {
-				console.log(`  Current cmd: "${profile.cmd}"`);
-				const newCmd = await prompt(rl, "New cmd (press Enter to keep current): ", isCancelled);
-				if (!newCmd) {
-					console.log("  cmd unchanged.");
-					break;
-				}
-				profile.cmd = newCmd;
-				console.log("  cmd updated.");
-				break;
-			}
-			case "2": {
 				const newBundles = await promptMultiSelect(
 					rl,
 					"Bundles",
@@ -483,10 +463,10 @@ async function editProfile(
 				console.log("  bundles updated.");
 				break;
 			}
-			case "3":
+			case "2":
 				return;
 			default:
-				console.log("  Invalid option. Please enter a number 1-3.");
+				console.log("  Invalid option. Please enter a number 1-2.");
 		}
 	}
 }

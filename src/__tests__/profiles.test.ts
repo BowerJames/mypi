@@ -18,34 +18,36 @@ describe("BUILTIN_PROFILES", () => {
 		]);
 	});
 
-	it("developer matches the repo's prior default profile (model-less)", () => {
-		expect(BUILTIN_PROFILES.developer.cmd).toBe("pi");
-		expect(BUILTIN_PROFILES.developer.bundles).toEqual([
-			"mode",
-			"code-review",
-			"dynamic-skills",
-			"btw",
-			"loop",
-			"render-raw",
-			"repo-explorer",
-			"overview",
-			"terminal-status",
-		]);
+	it("developer is a bundle-set (no cmd)", () => {
+		expect(BUILTIN_PROFILES.developer).toEqual({
+			bundles: [
+				"mode",
+				"code-review",
+				"dynamic-skills",
+				"btw",
+				"loop",
+				"render-raw",
+				"repo-explorer",
+				"overview",
+				"terminal-status",
+			],
+		});
 	});
 
-	it("reviewer matches the repo's prior reviewer profile (model-less)", () => {
-		expect(BUILTIN_PROFILES.reviewer.cmd).toBe("pi -p");
-		expect(BUILTIN_PROFILES.reviewer.bundles).toEqual(["code-review-prompt"]);
+	it("reviewer is a bundle-set for the code-review prompt (no cmd)", () => {
+		expect(BUILTIN_PROFILES.reviewer).toEqual({ bundles: ["code-review-prompt"] });
 	});
 
-	it("llm-wiki is a model-less wiki-manager profile", () => {
-		expect(BUILTIN_PROFILES["llm-wiki"].cmd).toBe("pi");
-		expect(BUILTIN_PROFILES["llm-wiki"].bundles).toEqual(["llm-wiki", "mode", "repo-explorer"]);
+	it("llm-wiki is a bundle-set", () => {
+		expect(BUILTIN_PROFILES["llm-wiki"]).toEqual({
+			bundles: ["llm-wiki", "mode", "repo-explorer"],
+		});
 	});
 
-	it("wayfinder is a model-less profile that activates the wayfinder bundle", () => {
-		expect(BUILTIN_PROFILES.wayfinder.cmd).toBe("pi");
-		expect(BUILTIN_PROFILES.wayfinder.bundles).toEqual(["wayfinder", "mode", "repo-explorer"]);
+	it("wayfinder is a bundle-set that activates the wayfinder bundle", () => {
+		expect(BUILTIN_PROFILES.wayfinder).toEqual({
+			bundles: ["wayfinder", "mode", "repo-explorer"],
+		});
 	});
 });
 
@@ -78,32 +80,52 @@ describe("mergeProfiles", () => {
 	});
 
 	it("adds user profiles alongside the built-ins", () => {
-		const custom: Profile = { cmd: "pi --model x", bundles: ["mode"] };
+		const custom: Profile = { bundles: ["mode"] };
 		const merged = mergeProfiles({ custom });
 		expect(merged.custom).toEqual(custom);
 		expect(merged.developer).toEqual(BUILTIN_PROFILES.developer);
 	});
 
 	it("a user profile with a built-in name replaces it wholesale", () => {
-		const override: Profile = { cmd: "pi --model y" }; // no bundles — replaces entirely
+		const override: Profile = { bundles: ["btw"] }; // replaces the built-in bundles
 		const merged = mergeProfiles({ developer: override });
-		// User wins; built-in cmd/bundles are NOT merged field-by-field.
-		expect(merged.developer.cmd).toBe("pi --model y");
-		expect(merged.developer.bundles).toBeUndefined();
+		// User wins; built-in bundles are NOT merged field-by-field.
+		expect(merged.developer).toEqual({ bundles: ["btw"] });
 	});
 
 	it("does not mutate the BUILTIN_PROFILES constant", () => {
-		mergeProfiles({ developer: { cmd: "pi --model z" } });
+		mergeProfiles({ developer: { bundles: ["x"] } });
 		// Original built-in must be untouched after a merge with an override.
-		expect(BUILTIN_PROFILES.developer.cmd).toBe("pi");
-		expect(BUILTIN_PROFILES.developer.bundles).toBeDefined();
+		expect(BUILTIN_PROFILES.developer).toEqual({
+			bundles: [
+				"mode",
+				"code-review",
+				"dynamic-skills",
+				"btw",
+				"loop",
+				"render-raw",
+				"repo-explorer",
+				"overview",
+				"terminal-status",
+			],
+		});
 	});
 
 	it("returns a fresh object each call (caller cannot poison built-ins)", () => {
 		const a = mergeProfiles(undefined);
-		a.developer.cmd = "mutated";
+		a.developer.bundles = ["mutated"];
 		const b = mergeProfiles(undefined);
-		expect(b.developer.cmd).toBe("pi"); // unaffected by the previous mutation
+		expect(b.developer.bundles).toEqual([
+			"mode",
+			"code-review",
+			"dynamic-skills",
+			"btw",
+			"loop",
+			"render-raw",
+			"repo-explorer",
+			"overview",
+			"terminal-status",
+		]); // unaffected by the previous mutation
 	});
 });
 
