@@ -131,9 +131,9 @@ describe("buildCodeReviewPromptSuffix", () => {
 		);
 	});
 
-	it("uses mypi run -p to launch the review", () => {
+	it("uses mypi -p to launch the review", () => {
 		const result = buildCodeReviewPromptSuffix("claude-sonnet-4-20250514");
-		expect(result).toContain("mypi run -p");
+		expect(result).toContain("mypi -p");
 	});
 
 	it("mentions the bash timeout guidance", () => {
