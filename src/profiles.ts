@@ -6,9 +6,9 @@
  * When the overlay is absent (no file / empty file), the built-ins are still
  * available and `developer` is the default profile (see `BUILTIN_DEFAULT`).
  *
- * Built-ins intentionally carry **no model id** — they use plain `pi` / `pi -p`
- * so the user's own configured default model applies, rather than coupling mypi
- * to a provider/model that would go stale.
+ * Built-ins intentionally carry **no model id** — mypi always runs `pi`, so the
+ * user's own configured default model applies, rather than coupling mypi to a
+ * provider/model that would go stale. A profile is just a named bundle-set.
  */
 
 import type { Profile } from "./types.js";
@@ -25,7 +25,6 @@ export const BUILTIN_DEFAULT = "developer";
  */
 export const BUILTIN_PROFILES: Record<string, Profile> = {
 	developer: {
-		cmd: "pi",
 		bundles: [
 			"mode",
 			"code-review",
@@ -39,15 +38,12 @@ export const BUILTIN_PROFILES: Record<string, Profile> = {
 		],
 	},
 	reviewer: {
-		cmd: "pi -p",
 		bundles: ["code-review-prompt"],
 	},
 	"llm-wiki": {
-		cmd: "pi",
 		bundles: ["llm-wiki", "mode", "repo-explorer"],
 	},
 	wayfinder: {
-		cmd: "pi",
 		bundles: ["wayfinder", "mode", "repo-explorer"],
 	},
 };
@@ -63,9 +59,7 @@ export function isBuiltinProfile(name: string): boolean {
  * in place and must not poison `BUILTIN_PROFILES` for the process lifetime.
  */
 function cloneProfile(profile: Profile): Profile {
-	return profile.bundles
-		? { cmd: profile.cmd, bundles: [...profile.bundles] }
-		: { cmd: profile.cmd };
+	return profile.bundles ? { bundles: [...profile.bundles] } : {};
 }
 
 /**

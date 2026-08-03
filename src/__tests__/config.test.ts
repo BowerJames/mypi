@@ -29,10 +29,10 @@ describe("validateUserConfig", () => {
 		expect(overlay.profiles).toBeUndefined();
 	});
 
-	it("accepts an overlay with profiles", () => {
+	it("accepts an overlay with a bundles-only profile", () => {
 		const overlay = validateUserConfig({
 			default: "custom",
-			profiles: { custom: { cmd: "pi", bundles: ["mode"] } },
+			profiles: { custom: { bundles: ["mode"] } },
 		});
 		expect(overlay.default).toBe("custom");
 		expect(overlay.profiles?.custom.bundles).toEqual(["mode"]);
@@ -41,6 +41,22 @@ describe("validateUserConfig", () => {
 	it("accepts an overlay with an empty profiles map", () => {
 		const overlay = validateUserConfig({ default: "developer", profiles: {} });
 		expect(overlay.profiles).toEqual({});
+	});
+
+	it("accepts a profile with no bundles (empty profile)", () => {
+		// A profile is a named bundle-set; bundles is optional, so an empty
+		// mapping is structurally valid (it runs bare `pi`).
+		const overlay = validateUserConfig({ profiles: { a: {} } });
+		expect(overlay.profiles?.a).toEqual({});
+	});
+
+	it("silently ignores a legacy `cmd:` key (no breakage on upgrade)", () => {
+		const overlay = validateUserConfig({
+			profiles: { a: { cmd: "pi --model x", bundles: ["mode"] } },
+		});
+		// cmd is dropped; bundles are kept.
+		expect(overlay.profiles?.a).toEqual({ bundles: ["mode"] });
+		expect((overlay.profiles?.a as Record<string, unknown>).cmd).toBeUndefined();
 	});
 
 	it("throws on non-object input", () => {
@@ -64,29 +80,13 @@ describe("validateUserConfig", () => {
 		expect(() => validateUserConfig({ profiles: { a: "not-an-object" } })).toThrow(ConfigError);
 	});
 
-	it("throws when a profile has no cmd", () => {
-		expect(() => validateUserConfig({ profiles: { a: {} } })).toThrow(ConfigError);
-	});
-
-	it("throws when a profile cmd is empty string", () => {
-		expect(() => validateUserConfig({ profiles: { a: { cmd: "" } } })).toThrow(ConfigError);
-	});
-
-	it("throws when a profile cmd is not a string", () => {
-		expect(() => validateUserConfig({ profiles: { a: { cmd: 123 } } })).toThrow(ConfigError);
-	});
-
 	it("throws when bundles is not an array of strings", () => {
-		expect(() => validateUserConfig({ profiles: { a: { cmd: "pi", bundles: "mode" } } })).toThrow(
-			ConfigError,
-		);
-		expect(() => validateUserConfig({ profiles: { a: { cmd: "pi", bundles: [123] } } })).toThrow(
-			ConfigError,
-		);
+		expect(() => validateUserConfig({ profiles: { a: { bundles: "mode" } } })).toThrow(ConfigError);
+		expect(() => validateUserConfig({ profiles: { a: { bundles: [123] } } })).toThrow(ConfigError);
 	});
 
-	it("omits optional arrays from profiles when not present", () => {
-		const overlay = validateUserConfig({ profiles: { a: { cmd: "pi" } } });
+	it("omits bundles when the profile has none", () => {
+		const overlay = validateUserConfig({ profiles: { a: {} } });
 		expect(overlay.profiles?.a.bundles).toBeUndefined();
 	});
 });
@@ -104,9 +104,9 @@ describe("buildEffectiveConfig", () => {
 	});
 
 	it("falls back to BUILTIN_DEFAULT when the overlay sets no default", () => {
-		const config = buildEffectiveConfig({ profiles: { custom: { cmd: "pi" } } });
+		const config = buildEffectiveConfig({ profiles: { custom: { bundles: ["mode"] } } });
 		expect(config.default).toBe(BUILTIN_DEFAULT);
-		expect(config.profiles.custom.cmd).toBe("pi");
+		expect(config.profiles.custom.bundles).toEqual(["mode"]);
 	});
 
 	it("honours a user-set default", () => {
@@ -122,16 +122,15 @@ describe("buildEffectiveConfig", () => {
 
 	it("a user profile with a built-in name overrides the built-in wholesale", () => {
 		const config = buildEffectiveConfig({
-			profiles: { developer: { cmd: "pi --model x" } },
+			profiles: { developer: { bundles: ["btw"] } },
 		});
-		// User wins: cmd replaced, built-in bundles dropped.
-		expect(config.profiles.developer.cmd).toBe("pi --model x");
-		expect(config.profiles.developer.bundles).toBeUndefined();
+		// User wins: the built-in's bundles are replaced wholesale.
+		expect(config.profiles.developer.bundles).toEqual(["btw"]);
 	});
 
 	it("keeps the built-in reviewer alongside a custom developer override", () => {
 		const config = buildEffectiveConfig({
-			profiles: { developer: { cmd: "pi --model x" } },
+			profiles: { developer: { bundles: ["btw"] } },
 		});
 		expect(config.profiles.reviewer).toEqual(BUILTIN_PROFILES.reviewer);
 	});
@@ -146,7 +145,7 @@ describe("buildEffectiveConfig", () => {
 		expect(() =>
 			buildEffectiveConfig({
 				default: "ghost",
-				profiles: { developer: { cmd: "pi" } },
+				profiles: { developer: { bundles: ["mode"] } },
 			}),
 		).toThrow(ConfigError);
 	});
@@ -193,11 +192,11 @@ describe("loadUserConfig / saveConfig", () => {
 	it("loads a valid overlay", () => {
 		writeFileSync(
 			resolve(testDir, "mypi-config.yaml"),
-			"default: custom\nprofiles:\n  custom:\n    cmd: pi\n",
+			"default: custom\nprofiles:\n  custom:\n    bundles:\n      - mode\n",
 		);
 		const overlay = loadUserConfig(testDir);
 		expect(overlay.default).toBe("custom");
-		expect(overlay.profiles?.custom.cmd).toBe("pi");
+		expect(overlay.profiles?.custom.bundles).toEqual(["mode"]);
 	});
 
 	it("throws ConfigError for invalid YAML", () => {
@@ -222,24 +221,24 @@ describe("loadUserConfig / saveConfig", () => {
 		}
 	});
 
-	it("throws ConfigError when a profile has no cmd", () => {
+	it("throws ConfigError when a profile has malformed bundles", () => {
 		writeFileSync(
 			resolve(testDir, "mypi-config.yaml"),
-			"profiles:\n  test:\n    bundles:\n      - mode\n",
+			"profiles:\n  test:\n    bundles: not-an-array\n",
 		);
 		try {
 			loadUserConfig(testDir);
 			expect.unreachable("Should have thrown");
 		} catch (err) {
 			expect(err).toBeInstanceOf(ConfigError);
-			expect((err as Error).message).toContain("cmd");
+			expect((err as Error).message).toContain("bundles");
 		}
 	});
 
 	it("save persists only the overlay (never built-ins)", () => {
 		const overlay: UserConfig = {
 			default: "custom",
-			profiles: { custom: { cmd: "pi --model claude", bundles: ["mode"] } },
+			profiles: { custom: { bundles: ["mode"] } },
 		};
 		saveConfig(testDir, overlay);
 
@@ -254,7 +253,7 @@ describe("loadUserConfig / saveConfig", () => {
 	it("save → load round-trips and the effective config merges built-ins back in", () => {
 		const overlay: UserConfig = {
 			default: "custom",
-			profiles: { custom: { cmd: "pi", bundles: ["mode"] } },
+			profiles: { custom: { bundles: ["mode"] } },
 		};
 		saveConfig(testDir, overlay);
 

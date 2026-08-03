@@ -1,9 +1,6 @@
 /**
- * Shared shell helpers used by both the profile launcher (cli.ts) and the
- * `mypi run` passthrough (run.ts).
- *
- * Extracted here so run.ts does not need to import from cli.ts (which would
- * create a cli <-> run circular import).
+ * Shared shell helper used by the `mypi` launcher (cli.ts): executes a
+ * fully-formed command string via `sh -c`, inheriting stdio and env.
  */
 
 import { spawn } from "node:child_process";

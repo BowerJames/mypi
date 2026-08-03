@@ -17,20 +17,17 @@ function isStringArray(value: unknown): value is string[] {
 }
 
 /**
- * Validate a single profile's shape. A profile must be a mapping with a
- * non-empty string `cmd`; `bundles`, if present, must be a string array.
- * Used for both user-overlay profiles and (defensively) any profile shape.
+ * Validate a single profile's shape. A profile is a mapping that may carry a
+ * `bundles` string array; a legacy `cmd:` key is silently ignored (the merged
+ * `mypi` always runs `pi`). Used for both user-overlay profiles and
+ * (defensively) any profile shape.
  */
 function validateProfile(name: string, value: unknown): Profile {
 	if (!isObject(value)) {
 		throw new ConfigError(`Profile "${name}" must be a mapping.`);
 	}
 
-	if (typeof value.cmd !== "string" || value.cmd.length === 0) {
-		throw new ConfigError(`Profile "${name}" must have a non-empty "cmd" string.`);
-	}
-
-	const profile: Profile = { cmd: value.cmd as string };
+	const profile: Profile = {};
 
 	if ("bundles" in value) {
 		if (!isStringArray(value.bundles)) {
@@ -39,6 +36,9 @@ function validateProfile(name: string, value: unknown): Profile {
 		profile.bundles = value.bundles;
 	}
 
+	// A legacy `cmd:` key is silently ignored — the merged `mypi` always runs
+	// `pi`, so a user config that still carries `cmd:` keeps loading without
+	// error (no breakage on upgrade).
 	return profile;
 }
 
