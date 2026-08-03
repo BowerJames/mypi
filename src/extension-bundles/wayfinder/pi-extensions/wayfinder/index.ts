@@ -17,8 +17,13 @@
  *                             auto-detects its primitive type and acts.
  *   /to-spec <map-ref>      — convert a *closed* wayfinder map into a
  *                             `wayfinder:spec` successor issue (PRD hand-off).
+ *   /implement <ref>        — turn a *closed* `wayfinder:spec` into merged,
+ *                             reviewed code. Auto-disambiguates: a closed spec
+ *                             → kickoff (slice + cut the trunk + create the
+ *                             Implementation Map); an open implementation
+ *                             ticket → work it through its lifecycle.
  *
- * All three commands are one-shot doctrine injectors that **clear the
+ * All of these commands are one-shot doctrine injectors that **clear the
  * conversation first** (`deliverDoctrine` → `ctx.newSession`), so the doctrine
  * is the agent's entire frame on a clean slate. There is no persisted session
  * state, no per-turn system-prompt suffix, and no footer. When the agent is
@@ -33,7 +38,12 @@ import { existsSync } from "node:fs";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { deliverDoctrine } from "./deliver.js";
 import { repoSlug, trackerScriptPath } from "./paths.js";
-import { buildChartDoctrine, buildSpecDoctrine, buildTicketDoctrine } from "./prompt.js";
+import {
+	buildChartDoctrine,
+	buildImplementDoctrine,
+	buildSpecDoctrine,
+	buildTicketDoctrine,
+} from "./prompt.js";
 import { detectTracker, type TrackerEnv, type TrackerKind } from "./tracker.js";
 
 /**
@@ -123,6 +133,39 @@ export default function wayfinderExtension(pi: ExtensionAPI): void {
 			}
 
 			await deliverDoctrine(ctx, "wayfinder-spec", buildSpecDoctrine({ tracker, repo, mapRef }));
+		},
+	});
+
+	// `/implement <ref>`: turn a closed `wayfinder:spec` into merged, reviewed
+	// code. A third one-shot doctrine injector in the same bundle, mirroring
+	// `/to-spec`'s shape: bare `/implement` is a usage error; `/implement <ref>`
+	// auto-disambiguates at the doctrine layer (a closed spec → kickoff; any
+	// open wayfinder implementation ticket → work that ticket). Same clear-
+	// then-inject as the other two (refuses while busy, else clears and fires
+	// the doctrine as the sole message).
+	pi.registerCommand("implement", {
+		description:
+			"Implement a closed wayfinder:spec (/implement <spec-ref> kickoff) or work an implementation ticket (/implement <ticket-ref>)",
+		handler: async (args, ctx) => {
+			const tracker = await resolveTracker(ctx);
+			const repo = repoSlug(ctx.cwd);
+			const ref = args.trim();
+
+			ctx.ui.notify(`Wayfinder implement tracker: ${tracker}`, "info");
+
+			if (!ref) {
+				ctx.ui.notify(
+					"Usage: /implement <ref> — pass a closed wayfinder:spec (kickoff) or an open wayfinder implementation ticket (work it).",
+					"error",
+				);
+				return;
+			}
+
+			await deliverDoctrine(
+				ctx,
+				"wayfinder-implement",
+				buildImplementDoctrine({ tracker, repo, ref }),
+			);
 		},
 	});
 }

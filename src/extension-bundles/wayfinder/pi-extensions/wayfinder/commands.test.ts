@@ -149,3 +149,46 @@ describe("/to-spec", () => {
 		});
 	});
 });
+
+describe("/implement", () => {
+	it("notifies the autodetected tracker, then injects the implement doctrine on a clean slate", async () => {
+		const { commands, ctx, calls } = setup();
+		await handler(commands, "implement")("74", ctx);
+
+		expect(calls.notify[0]).toEqual({
+			message: "Wayfinder implement tracker: github",
+			type: "info",
+		});
+		expect(calls.newSession).toEqual([{ parentSession: "/sessions/parent.jsonl" }]);
+		expect(calls.sendMessage).toHaveLength(1);
+		expect(calls.sendMessage[0]?.message.customType).toBe("wayfinder-implement");
+		expect(calls.sendMessage[0]?.message.content).toContain("/implement 74");
+		expect(calls.sendMessage[0]?.message.display).toBe(true);
+		expect(calls.sendMessage[0]?.options).toEqual({ triggerTurn: true });
+	});
+
+	it("with no ref shows the usage error and does not clear", async () => {
+		const { commands, ctx, calls } = setup();
+		await handler(commands, "implement")("   ", ctx);
+
+		expect(calls.newSession).toHaveLength(0);
+		expect(calls.sendMessage).toHaveLength(0);
+		expect(calls.notify).toContainEqual({
+			message:
+				"Usage: /implement <ref> — pass a closed wayfinder:spec (kickoff) or an open wayfinder implementation ticket (work it).",
+			type: "error",
+		});
+	});
+
+	it("refuses while busy (no clear, no inject)", async () => {
+		const { commands, ctx, calls } = setup({ idle: false });
+		await handler(commands, "implement")("74", ctx);
+
+		expect(calls.newSession).toHaveLength(0);
+		expect(calls.sendMessage).toHaveLength(0);
+		expect(calls.notify).toContainEqual({
+			message: "Agent is busy — wait for it to finish, then re-run.",
+			type: "warning",
+		});
+	});
+});

@@ -129,7 +129,12 @@ describe("deliverDoctrine — idle (clean slate)", () => {
 	});
 
 	it("forwards each customType + content verbatim, display + triggerTurn always on", async () => {
-		const types = ["wayfinder-chart", "wayfinder-ticket", "wayfinder-spec"] as const;
+		const types = [
+			"wayfinder-chart",
+			"wayfinder-ticket",
+			"wayfinder-spec",
+			"wayfinder-implement",
+		] as const;
 		for (const customType of types) {
 			const { ctx, calls } = fakeCtx();
 			await deliverDoctrine(ctx, customType, `body-${customType}`);

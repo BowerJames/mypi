@@ -55,6 +55,47 @@ export function worktreeDir(mapSlug: string, ticketSlug: string): string {
 	return join(homedir(), ".worktrees", mapSlug, ticketSlug);
 }
 
+// ---------------------------------------------------------------------------
+// /implement — implementation-namespace paths (spec #74)
+// ---------------------------------------------------------------------------
+//
+// The implementation phase cuts a per-effort integration trunk plus per-unit
+// dev branches and worktrees, all keyed on the **spec slug** — the stable,
+// human-named kickoff anchor (not the Implementation-Map slug). The trunk is
+// cut from the current branch at kickoff (recorded in the Implementation Map
+// body as the effort's base), not hardcoded to any branch. Branch names use a
+// literal `/` (git ref syntax), not `path.join` (which is platform-dependent).
+
+/**
+ * The integration trunk for an effort: `implement/<spec-slug>`. Cut from the
+ * current branch at kickoff (after the user confirms the proposal) and recorded
+ * in the Implementation Map body as the effort's durable anchor. All dev units
+ * of one effort integrate against this one stable branch.
+ */
+export function implementTrunkBranch(specSlug: string): string {
+	return `implement/${specSlug}`;
+}
+
+/**
+ * A dev-unit branch: `dev/<spec-slug>/<n>-<slug>`. `<n>` is the tracker ticket
+ * number, **raw (no zero-padding)** — ticket numbers climb into the
+ * hundreds/thousands, so fixed-width padding would be inconsistent past its
+ * width. `git branch | grep <spec-slug>` still groups the trunk and every unit.
+ */
+export function implementDevBranch(specSlug: string, n: number, slug: string): string {
+	return `dev/${specSlug}/${n}-${slug}`;
+}
+
+/**
+ * A dev-unit worktree: `~/.worktrees/<spec-slug>/<n>-<slug>`. The path mirrors
+ * the dev branch name under `~/.worktrees/`, so the unit's isolated checkout
+ * lives alongside its branch. Each unit is a worktree-on-a-branch so multiple
+ * units run in parallel without contending for one working tree.
+ */
+export function implementWorktreeDir(specSlug: string, n: number, slug: string): string {
+	return join(homedir(), ".worktrees", specSlug, `${n}-${slug}`);
+}
+
 /** The optional override script: `cwd/.mypi/wayfinder-tracker.sh`. */
 export function trackerScriptPath(cwd: string): string {
 	return join(cwd, ".mypi", "wayfinder-tracker.sh");

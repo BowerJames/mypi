@@ -1,5 +1,5 @@
 /**
- * Clear-then-inject — the shared "send" step for all three wayfinder commands.
+ * Clear-then-inject — the shared "send" step for every wayfinder command.
  *
  * Each wayfinder command turns the agent into a wayfinder for one turn by
  * injecting an operating doctrine. To keep that doctrine the agent's entire
@@ -29,7 +29,11 @@
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 
 /** The `customType` carried by each wayfinder doctrine message. */
-export type WayfinderDoctrineType = "wayfinder-chart" | "wayfinder-ticket" | "wayfinder-spec";
+export type WayfinderDoctrineType =
+	| "wayfinder-chart"
+	| "wayfinder-ticket"
+	| "wayfinder-spec"
+	| "wayfinder-implement";
 
 /**
  * Clear the conversation, then inject `content` as the fresh session's sole
