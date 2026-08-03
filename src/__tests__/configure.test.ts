@@ -52,10 +52,11 @@ describe("discoverBundles", () => {
 		expect(bundles).toContain("render-raw");
 		expect(bundles).toContain("code-review");
 		expect(bundles).toContain("code-review-prompt");
-		expect(bundles).toContain("review-agent-trajectory");
-		expect(bundles).toContain("review-agent-trajectory-prompt");
 		expect(bundles).toContain("repo-explorer");
 		expect(bundles).toContain("overview");
+		expect(bundles).toContain("llm-wiki");
+		expect(bundles).toContain("terminal-status");
+		expect(bundles).toContain("wayfinder");
 	});
 
 	it("returns a sorted array", () => {
@@ -100,6 +101,14 @@ describe("loadBundle / expandBundle", () => {
 		const resolved = await expandBundle("repo-explorer");
 		expect(resolved.skills.length).toBe(1);
 		expect(existsSync(resolve(BUNDLES_DIR, "repo-explorer", "skills", "repo-explorer"))).toBe(true);
+	});
+
+	it("expands wayfinder to a single pi-extension file that exists on disk", async () => {
+		const resolved = await expandBundle("wayfinder");
+		expect(resolved.piExtensions.length).toBe(1);
+		expect(resolved.skills).toEqual([]);
+		expect(resolved.prompts).toEqual([]);
+		expect(existsSync(resolved.piExtensions[0])).toBe(true);
 	});
 
 	it("throws on an unknown bundle", async () => {

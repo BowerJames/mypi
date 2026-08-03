@@ -2,112 +2,161 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { ConfigError, loadConfig, saveConfig, validateConfig } from "../config.js";
-import type { Config } from "../types.js";
+import {
+	buildEffectiveConfig,
+	ConfigError,
+	loadEffectiveConfig,
+	loadUserConfig,
+	saveConfig,
+	validateUserConfig,
+} from "../config.js";
+import { BUILTIN_DEFAULT, BUILTIN_PROFILES } from "../profiles.js";
+import type { UserConfig } from "../types.js";
 
-describe("validateConfig", () => {
-	it("accepts a minimal valid config", () => {
-		const raw = { default: "default", profiles: { default: { cmd: "pi" } } };
-		const config = validateConfig(raw);
-		expect(config.default).toBe("default");
-		expect(config.profiles.default.cmd).toBe("pi");
+// ---------------------------------------------------------------------------
+// validateUserConfig (lenient overlay validation)
+// ---------------------------------------------------------------------------
+
+describe("validateUserConfig", () => {
+	it("returns an empty overlay for null/undefined input (absent/empty file)", () => {
+		expect(validateUserConfig(undefined)).toEqual({});
+		expect(validateUserConfig(null)).toEqual({});
 	});
 
-	it("accepts a config with all fields", () => {
-		const raw = {
-			default: "fullstack",
-			profiles: {
-				fullstack: {
-					cmd: "pi --model claude",
-					bundles: ["mode"],
-				},
-			},
-		};
-		const config = validateConfig(raw);
-		expect(config.default).toBe("fullstack");
-		expect(config.profiles.fullstack.bundles).toEqual(["mode"]);
+	it("accepts a minimal overlay with only a default", () => {
+		const overlay = validateUserConfig({ default: "developer" });
+		expect(overlay.default).toBe("developer");
+		expect(overlay.profiles).toBeUndefined();
 	});
 
-	it("throws on null input", () => {
-		expect(() => validateConfig(null)).toThrow(ConfigError);
+	it("accepts an overlay with profiles", () => {
+		const overlay = validateUserConfig({
+			default: "custom",
+			profiles: { custom: { cmd: "pi", bundles: ["mode"] } },
+		});
+		expect(overlay.default).toBe("custom");
+		expect(overlay.profiles?.custom.bundles).toEqual(["mode"]);
+	});
+
+	it("accepts an overlay with an empty profiles map", () => {
+		const overlay = validateUserConfig({ default: "developer", profiles: {} });
+		expect(overlay.profiles).toEqual({});
 	});
 
 	it("throws on non-object input", () => {
-		expect(() => validateConfig("string")).toThrow(ConfigError);
-		expect(() => validateConfig(42)).toThrow(ConfigError);
+		expect(() => validateUserConfig("string")).toThrow(ConfigError);
+		expect(() => validateUserConfig(42)).toThrow(ConfigError);
 	});
 
 	it("throws on array input", () => {
-		expect(() => validateConfig([])).toThrow(ConfigError);
-	});
-
-	it("throws when default is missing", () => {
-		expect(() => validateConfig({ profiles: { a: { cmd: "pi" } } })).toThrow(ConfigError);
+		expect(() => validateUserConfig([])).toThrow(ConfigError);
 	});
 
 	it("throws when default is not a string", () => {
-		expect(() => validateConfig({ default: 123, profiles: { a: { cmd: "pi" } } })).toThrow(
-			ConfigError,
-		);
-	});
-
-	it("throws when default does not reference an existing profile", () => {
-		expect(() => validateConfig({ default: "missing", profiles: { a: { cmd: "pi" } } })).toThrow(
-			ConfigError,
-		);
-	});
-
-	it("throws when profiles is missing", () => {
-		expect(() => validateConfig({ default: "a" })).toThrow(ConfigError);
+		expect(() => validateUserConfig({ default: 123 })).toThrow(ConfigError);
 	});
 
 	it("throws when profiles is not an object", () => {
-		expect(() => validateConfig({ default: "a", profiles: [] })).toThrow(ConfigError);
-	});
-
-	it("throws when profiles is empty", () => {
-		expect(() => validateConfig({ default: "a", profiles: {} })).toThrow(ConfigError);
+		expect(() => validateUserConfig({ profiles: [] })).toThrow(ConfigError);
 	});
 
 	it("throws when a profile is not an object", () => {
-		expect(() => validateConfig({ default: "a", profiles: { a: "not-an-object" } })).toThrow(
-			ConfigError,
-		);
+		expect(() => validateUserConfig({ profiles: { a: "not-an-object" } })).toThrow(ConfigError);
 	});
 
 	it("throws when a profile has no cmd", () => {
-		expect(() => validateConfig({ default: "a", profiles: { a: {} } })).toThrow(ConfigError);
+		expect(() => validateUserConfig({ profiles: { a: {} } })).toThrow(ConfigError);
 	});
 
 	it("throws when a profile cmd is empty string", () => {
-		expect(() => validateConfig({ default: "a", profiles: { a: { cmd: "" } } })).toThrow(
-			ConfigError,
-		);
+		expect(() => validateUserConfig({ profiles: { a: { cmd: "" } } })).toThrow(ConfigError);
 	});
 
 	it("throws when a profile cmd is not a string", () => {
-		expect(() => validateConfig({ default: "a", profiles: { a: { cmd: 123 } } })).toThrow(
+		expect(() => validateUserConfig({ profiles: { a: { cmd: 123 } } })).toThrow(ConfigError);
+	});
+
+	it("throws when bundles is not an array of strings", () => {
+		expect(() => validateUserConfig({ profiles: { a: { cmd: "pi", bundles: "mode" } } })).toThrow(
+			ConfigError,
+		);
+		expect(() => validateUserConfig({ profiles: { a: { cmd: "pi", bundles: [123] } } })).toThrow(
 			ConfigError,
 		);
 	});
 
-	it("throws when bundles is not an array of strings", () => {
-		expect(() =>
-			validateConfig({ default: "a", profiles: { a: { cmd: "pi", bundles: "mode" } } }),
-		).toThrow(ConfigError);
-
-		expect(() =>
-			validateConfig({ default: "a", profiles: { a: { cmd: "pi", bundles: [123] } } }),
-		).toThrow(ConfigError);
-	});
-
 	it("omits optional arrays from profiles when not present", () => {
-		const config = validateConfig({ default: "a", profiles: { a: { cmd: "pi" } } });
-		expect(config.profiles.a.bundles).toBeUndefined();
+		const overlay = validateUserConfig({ profiles: { a: { cmd: "pi" } } });
+		expect(overlay.profiles?.a.bundles).toBeUndefined();
 	});
 });
 
-describe("loadConfig / saveConfig", () => {
+// ---------------------------------------------------------------------------
+// buildEffectiveConfig (merge built-ins + overlay)
+// ---------------------------------------------------------------------------
+
+describe("buildEffectiveConfig", () => {
+	it("uses built-ins only when the overlay is empty", () => {
+		const config = buildEffectiveConfig({});
+		expect(config.default).toBe(BUILTIN_DEFAULT);
+		expect(config.profiles.developer).toEqual(BUILTIN_PROFILES.developer);
+		expect(config.profiles.reviewer).toEqual(BUILTIN_PROFILES.reviewer);
+	});
+
+	it("falls back to BUILTIN_DEFAULT when the overlay sets no default", () => {
+		const config = buildEffectiveConfig({ profiles: { custom: { cmd: "pi" } } });
+		expect(config.default).toBe(BUILTIN_DEFAULT);
+		expect(config.profiles.custom.cmd).toBe("pi");
+	});
+
+	it("honours a user-set default", () => {
+		const config = buildEffectiveConfig({ default: "reviewer" });
+		expect(config.default).toBe("reviewer");
+	});
+
+	it("allows a user default that names a built-in", () => {
+		const config = buildEffectiveConfig({ default: "developer" });
+		expect(config.default).toBe("developer");
+		expect(config.profiles.developer).toBeDefined();
+	});
+
+	it("a user profile with a built-in name overrides the built-in wholesale", () => {
+		const config = buildEffectiveConfig({
+			profiles: { developer: { cmd: "pi --model x" } },
+		});
+		// User wins: cmd replaced, built-in bundles dropped.
+		expect(config.profiles.developer.cmd).toBe("pi --model x");
+		expect(config.profiles.developer.bundles).toBeUndefined();
+	});
+
+	it("keeps the built-in reviewer alongside a custom developer override", () => {
+		const config = buildEffectiveConfig({
+			profiles: { developer: { cmd: "pi --model x" } },
+		});
+		expect(config.profiles.reviewer).toEqual(BUILTIN_PROFILES.reviewer);
+	});
+
+	it("throws when a user default does not reference any profile", () => {
+		expect(() => buildEffectiveConfig({ default: "missing" })).toThrow(ConfigError);
+	});
+
+	it("throws when a user default references a removed-by-override name", () => {
+		// If a user override replaces 'developer' but sets default to a name
+		// that still does not exist after merge, it must error.
+		expect(() =>
+			buildEffectiveConfig({
+				default: "ghost",
+				profiles: { developer: { cmd: "pi" } },
+			}),
+		).toThrow(ConfigError);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// loadUserConfig / saveConfig (file I/O on the overlay)
+// ---------------------------------------------------------------------------
+
+describe("loadUserConfig / saveConfig", () => {
 	let testDir: string;
 
 	beforeEach(() => {
@@ -122,104 +171,136 @@ describe("loadConfig / saveConfig", () => {
 		rmSync(testDir, { recursive: true, force: true });
 	});
 
-	it("loads a valid config file", () => {
-		writeFileSync(
-			resolve(testDir, "mypi-config.yaml"),
-			"default: my-profile\nprofiles:\n  my-profile:\n    cmd: pi\n",
-		);
-		const config = loadConfig(testDir);
-		expect(config.default).toBe("my-profile");
-		expect(config.profiles["my-profile"].cmd).toBe("pi");
+	it("returns an empty overlay when the file is absent", () => {
+		expect(loadUserConfig(testDir)).toEqual({});
 	});
 
-	it("throws ConfigError when file not found", () => {
-		try {
-			loadConfig(testDir);
-			expect.unreachable("Should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(ConfigError);
-			expect((err as ConfigError).message).toContain("not found");
-			expect((err as ConfigError).message).toContain("mypi init");
-		}
+	it("returns an empty overlay for an empty file", () => {
+		writeFileSync(resolve(testDir, "mypi-config.yaml"), "");
+		expect(loadUserConfig(testDir)).toEqual({});
+	});
+
+	it("treats a bare `profiles:` key (parses to null) as absent — regression for mypi init output", () => {
+		// `mypi init` writes `profiles:` with only comments beneath, which YAML
+		// parses to null. Reading that back must NOT throw.
+		writeFileSync(
+			resolve(testDir, "mypi-config.yaml"),
+			"default: developer\nprofiles:\n  # custom:\n",
+		);
+		expect(loadUserConfig(testDir)).toEqual({ default: "developer" });
+	});
+
+	it("loads a valid overlay", () => {
+		writeFileSync(
+			resolve(testDir, "mypi-config.yaml"),
+			"default: custom\nprofiles:\n  custom:\n    cmd: pi\n",
+		);
+		const overlay = loadUserConfig(testDir);
+		expect(overlay.default).toBe("custom");
+		expect(overlay.profiles?.custom.cmd).toBe("pi");
 	});
 
 	it("throws ConfigError for invalid YAML", () => {
 		writeFileSync(resolve(testDir, "mypi-config.yaml"), ":\n  invalid: [yaml");
 		try {
-			loadConfig(testDir);
+			loadUserConfig(testDir);
 			expect.unreachable("Should have thrown");
 		} catch (err) {
 			expect(err).toBeInstanceOf(ConfigError);
-			expect((err as ConfigError).message).toContain("Invalid YAML");
+			expect((err as Error).message).toContain("Invalid YAML");
 		}
 	});
 
-	it("throws ConfigError when default is missing", () => {
-		writeFileSync(resolve(testDir, "mypi-config.yaml"), "profiles:\n  test:\n    cmd: pi\n");
+	it("throws ConfigError when profiles is the wrong type", () => {
+		writeFileSync(resolve(testDir, "mypi-config.yaml"), "profiles: []\n");
 		try {
-			loadConfig(testDir);
+			loadUserConfig(testDir);
 			expect.unreachable("Should have thrown");
 		} catch (err) {
 			expect(err).toBeInstanceOf(ConfigError);
-			expect((err as ConfigError).message).toContain("default");
+			expect((err as Error).message).toContain("profiles");
 		}
 	});
 
-	it("throws ConfigError when profiles is empty", () => {
-		writeFileSync(resolve(testDir, "mypi-config.yaml"), "default: test\nprofiles: {}\n");
-		try {
-			loadConfig(testDir);
-			expect.unreachable("Should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(ConfigError);
-			expect((err as ConfigError).message).toContain("No profiles defined");
-		}
-	});
-
-	it("throws ConfigError when profile has no cmd", () => {
+	it("throws ConfigError when a profile has no cmd", () => {
 		writeFileSync(
 			resolve(testDir, "mypi-config.yaml"),
-			"default: test\nprofiles:\n  test:\n    bundles:\n      - mode\n",
+			"profiles:\n  test:\n    bundles:\n      - mode\n",
 		);
 		try {
-			loadConfig(testDir);
+			loadUserConfig(testDir);
 			expect.unreachable("Should have thrown");
 		} catch (err) {
 			expect(err).toBeInstanceOf(ConfigError);
-			expect((err as ConfigError).message).toContain("cmd");
+			expect((err as Error).message).toContain("cmd");
 		}
 	});
 
-	it("throws ConfigError when bundles contains non-string", () => {
-		writeFileSync(
-			resolve(testDir, "mypi-config.yaml"),
-			"default: test\nprofiles:\n  test:\n    cmd: pi\n    bundles:\n      - 123\n",
-		);
-		try {
-			loadConfig(testDir);
-			expect.unreachable("Should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(ConfigError);
-			expect((err as ConfigError).message).toContain("bundles");
-		}
-	});
-
-	it("save and load round-trip preserves config", () => {
-		const config: Config = {
-			default: "dev",
-			profiles: {
-				dev: {
-					cmd: "pi --model claude",
-					bundles: ["mode"],
-				},
-			},
+	it("save persists only the overlay (never built-ins)", () => {
+		const overlay: UserConfig = {
+			default: "custom",
+			profiles: { custom: { cmd: "pi --model claude", bundles: ["mode"] } },
 		};
-		saveConfig(testDir, config);
+		saveConfig(testDir, overlay);
 
-		const loaded = loadConfig(testDir);
-		expect(loaded.default).toBe("dev");
-		expect(Object.keys(loaded.profiles)).toEqual(["dev"]);
-		expect(loaded.profiles.dev.cmd).toBe("pi --model claude");
-		expect(loaded.profiles.dev.bundles).toEqual(["mode"]);
+		const reloaded = loadUserConfig(testDir);
+		expect(reloaded.default).toBe("custom");
+		expect(Object.keys(reloaded.profiles ?? {})).toEqual(["custom"]);
+		// Built-ins must NOT be serialised into the user overlay file.
+		expect(reloaded.profiles?.developer).toBeUndefined();
+		expect(reloaded.profiles?.reviewer).toBeUndefined();
+	});
+
+	it("save → load round-trips and the effective config merges built-ins back in", () => {
+		const overlay: UserConfig = {
+			default: "custom",
+			profiles: { custom: { cmd: "pi", bundles: ["mode"] } },
+		};
+		saveConfig(testDir, overlay);
+
+		const effective = loadEffectiveConfig(testDir);
+		expect(effective.default).toBe("custom");
+		// Both the user profile and the built-ins are present in the merge.
+		expect(Object.keys(effective.profiles).sort()).toEqual(
+			["custom", "developer", "llm-wiki", "reviewer", "wayfinder"].sort(),
+		);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// loadEffectiveConfig (end-to-end: file → merge)
+// ---------------------------------------------------------------------------
+
+describe("loadEffectiveConfig", () => {
+	let testDir: string;
+
+	beforeEach(() => {
+		testDir = resolve(
+			tmpdir(),
+			`mypi-config-eff-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+		);
+		mkdirSync(testDir, { recursive: true });
+	});
+
+	afterEach(() => {
+		rmSync(testDir, { recursive: true, force: true });
+	});
+
+	it("returns built-ins only when no config file exists (default = developer)", () => {
+		const config = loadEffectiveConfig(testDir);
+		expect(config.default).toBe("developer");
+		expect(config.profiles.developer).toEqual(BUILTIN_PROFILES.developer);
+		expect(config.profiles.reviewer).toEqual(BUILTIN_PROFILES.reviewer);
+	});
+
+	it("throws ConfigError when the user default does not resolve", () => {
+		writeFileSync(resolve(testDir, "mypi-config.yaml"), "default: ghost\nprofiles: {}\n");
+		try {
+			loadEffectiveConfig(testDir);
+			expect.unreachable("Should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(ConfigError);
+			expect((err as Error).message).toContain("ghost");
+		}
 	});
 });

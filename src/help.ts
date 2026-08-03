@@ -28,8 +28,12 @@ COMMANDS
   configure     Interactive config editor
 
 OPTIONS
-  --profile <name>   Use the named profile (default from config)
+  --profile <name>   Use the named profile (default from config, else 'developer')
   -h, --help         Show help
+
+Built-in profiles (developer, reviewer, llm-wiki, wayfinder) are always available with no
+mypi-config.yaml. The config file is an optional overlay: add/override
+profiles and optionally set 'default'. Run 'mypi configure' to edit it.
 
 Profiles reference bundles by name rather than configuring individual
 extensions/skills/prompts. Run 'mypi configure' to edit bundles.
@@ -60,7 +64,9 @@ Opens an interactive editor for mypi-config.yaml. Allows setting the
 default profile, adding/removing/editing profiles, and selecting
 bundles (each a packaged unit of pi-extensions, skills, and prompts).
 
-Requires an existing mypi-config.yaml. Run 'mypi init' to create one.
+Built-in profiles (developer, reviewer, llm-wiki, wayfinder) are shown but cannot be removed;
+editing one copies it into the overlay as an override. If no config file
+exists it is created on save.
 
 OPTIONS
   -h, --help         Show help

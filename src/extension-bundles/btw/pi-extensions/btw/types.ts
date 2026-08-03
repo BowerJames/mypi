@@ -26,8 +26,6 @@ export interface BtwInputs {
 	messages: SessionContext["messages"];
 	/** Parent model (non-null; guarded before capture). */
 	model: NonNullable<ExtensionContext["model"]>;
-	/** Parent model registry (carries resolved auth/API keys). */
-	modelRegistry: ExtensionContext["modelRegistry"];
 	/** Parent thinking level. */
 	thinkingLevel: ReturnType<ExtensionAPI["getThinkingLevel"]>;
 }

@@ -5,8 +5,8 @@ import type { ExtensionBundleManifest } from "../../types.js";
 const here = dirname(fileURLToPath(import.meta.url));
 
 export default {
-	name: "review-agent-trajectory-prompt",
-	piExtensions: [],
+	name: "llm-wiki",
+	piExtensions: [join(here, "pi-extensions", "llm-wiki", "index.ts")],
 	skills: [],
-	prompts: [join(here, "prompts", "review-agent-trajectory.md")],
+	prompts: [],
 } satisfies ExtensionBundleManifest;

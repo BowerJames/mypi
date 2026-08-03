@@ -45,13 +45,17 @@ Notes:
 
 ## Setup
 
-1. Create a default config:
+mypi works out of the box with **no config** — built-in profiles
+(`developer`, `reviewer`, `llm-wiki`, `wayfinder`) are always available. To add or override profiles,
+create a config:
 
 ```bash
 mypi init
 ```
 
-2. Edit `mypi-config.yaml` to define your profiles (or use `mypi configure` for an interactive editor).
+This writes a starter `mypi-config.yaml` overlay. Edit it to define your own
+profiles (or use `mypi configure` for an interactive editor). A user profile
+with the same name as a built-in **replaces** it.
 
 ## Usage
 
@@ -107,7 +111,17 @@ mypi run --help
 
 ## Configuration
 
-Create a `mypi-config.yaml` in your project root:
+mypi ships built-in profiles and **works with no config file at all**. The
+optional `mypi-config.yaml` is an **overlay** that adds new profiles,
+overrides built-ins by name (replace), and optionally sets `default`. If you
+just want to tweak things, create one:
+
+```bash
+mypi init        # writes a starter overlay
+```
+
+Example overlay adding a custom `fullstack` profile (the built-ins
+`developer`, `reviewer`, `llm-wiki`, and `wayfinder` remain available alongside it):
 
 ```yaml
 default: fullstack
@@ -122,12 +136,10 @@ profiles:
       - repo-explorer          # explore third-party codebases into a /tmp cache
       - overview               # repo overview and open issues
     cmd: "pi --model claude-sonnet-4-20250514 --tools read,bash,edit,write,grep,find,ls"
-
-  reviewer:
-    bundles:
-      - code-review-prompt     # the review prompt only (no extension)
-    cmd: "pi --model claude-sonnet-4-20250514 --tools read,grep,find,ls"
 ```
+
+To override a built-in instead of adding a new name, define a profile with a
+built-in name (e.g. `developer:`) — your definition replaces it wholesale.
 
 A **bundle** is a single unit that packages related pi-extensions, skills, and prompts together, loaded by one name. See [Bundled Resources](#bundled-resources) for the full list.
 
@@ -135,7 +147,7 @@ A **bundle** is a single unit that packages related pi-extensions, skills, and p
 
 | Field | Description |
 |-------|-------------|
-| `default` | Required profile to use when none is specified |
+| `default` | Profile to use when none is specified on the CLI. Optional — falls back to the `developer` built-in if unset or if the config file is absent. |
 | `profiles.<name>.bundles` | List of bundle names from mypi's library |
 | `profiles.<name>.cmd` | Base pi command to execute. Bundle resources are injected automatically. |
 
@@ -149,15 +161,15 @@ Any additional arguments passed on the command line are appended to the command.
 - a bundle's skills → `--skill <path>`
 - a bundle's prompts → `--prompt-template <path>`
 
+A bundle may declare `dependencies`; those bundles are auto-activated and their resources are emitted **first** (dependencies before dependents), so a skill whose `SKILL.md` uses dynamic `!` blocks always has the `dynamic-skills` extension loaded by the time it expands. Dependencies are resolved transitively and **deduplicated across the whole command** — listing a dep explicitly, or two bundles sharing a dep, never double-loads an extension (which would double-register its handlers). See [Bundle dependencies](#bundle-dependencies).
+
 You control everything else (model, tools, thinking level, etc.) through the `cmd` field.
 
-Bundles live under `extension-bundles/<name>/` inside the installed package. Each bundle's `index.ts` manifest declares its resources as paths relative to itself, so they resolve wherever npm installs the package. `mypi run` applies the same expansion via `--bundle` (see [Running pi directly](#running-pi-directly-mypi-run)).
-
-Some bundles are designed to work together. For example, the `review-agent-trajectory` bundle (a pi-extension) shells out to `mypi --profile review-agent-trajectory "/review-agent-trajectory <transcript>"`, so the target profile loads the separate `review-agent-trajectory-prompt` bundle (prompt only) rather than the extension bundle itself — otherwise the command would re-register itself.
+Bundles live under `extension-bundles/<name>/` inside the installed package. Each bundle's `index.ts` manifest declares its resources as paths relative to itself, so they resolve wherever npm installs the package. A bundle may also declare `dependencies` (other bundle names); those are auto-activated alongside it — see [Bundle dependencies](#bundle-dependencies). `mypi run` applies the same expansion via `--bundle` (see [Running pi directly](#running-pi-directly-mypi-run)).
 
 ## Bundled Resources
 
-mypi ships 11 **bundles**, each under `extension-bundles/<name>/`. Most contain a single resource type; the `code-review` and `review-agent-trajectory` features split into an extension bundle and a prompt-only bundle (the prompt must be loadable without the extension for the review subprocess).
+mypi ships 12 **bundles**, each under `extension-bundles/<name>/`. Most contain a single resource type; the `code-review` feature splits into an extension bundle and a prompt-only bundle (the prompt must be loadable without the extension for the review subprocess).
 
 | Bundle | Contains | Description |
 |--------|----------|-------------|
@@ -168,10 +180,23 @@ mypi ships 11 **bundles**, each under `extension-bundles/<name>/`. Most contain 
 | `render-raw` | pi-extension | Append a raw (unformatted) rendering of the last assistant reply — `/render-raw` injects a custom-typed copy of the reply rendered as plain text (literal markdown), shown in the TUI but kept out of the main agent's context. Additive, not a toggle; a re-run against the same reply is a no-op |
 | `code-review` | pi-extension | Appends a "run an independent review before a PR" system-prompt section and provides `/code-review-model` to set the recommended review model (defaults to the active session model) |
 | `code-review-prompt` | prompt | Independent code review of an issue's implementation on a branch. Usage: `/code-review <issue_number> <branch_to_review> <target_branch_of_pr>` |
-| `review-agent-trajectory` | pi-extension | Session trajectory review command — captures the current conversation and launches a review pass |
-| `review-agent-trajectory-prompt` | prompt | Review a full agent session transcript for skill gaps, improvements, and missing guidance |
-| `repo-explorer` | skill | Explore third-party codebases/libraries/frameworks without cluttering the active workspace — clones into a `/tmp/repos/` cache and reuses existing checkouts |
+| `repo-explorer` | skill | Explore third-party codebases/libraries/frameworks without cluttering the active workspace — clones into a `/tmp/repos/` cache and reuses existing checkouts. Auto-activates `dynamic-skills` (its `SKILL.md` uses dynamic `!` shell blocks) |
 | `overview` | prompt | Overview of the repository, core components, and open issues |
+| `terminal-status` | pi-extension | Reflect session state in the terminal tab title — on `agent_start` sets the title to `working`, on `agent_settled` sets it to `idle`. Works in any terminal (TUI mode) by emitting the OSC 1 tab-title escape sequence (`\033]1;<title>\007`) to stdout. Best-effort: a failed write is swallowed. Note: pi's own window-title writes (OSC 0) can momentarily override the tab title on startup/session change |
+| `llm-wiki` | pi-extension | Turn the agent into a wiki manager for an [OKF](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) wiki (Karpathy's [LLM-wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)) — `/wiki-root`/`/wiki-spec` configure the bundle root and per-wiki spec doc (defaults `wiki/` and `/SPEC.md`), the spec is **auto-injected** into the system prompt each turn, `/wiki-init` scaffolds empty assets, and `/wiki-ingest`/`/wiki-query`/`/wiki-lint` inject the operating-model guidance |
+| `wayfinder` | pi-extension | Chart a large, foggy effort as a **map of decision tickets** on the issue tracker, resolving one at a time until the way to the destination is clear (inspired by [mattpocock/skills `wayfinder`](https://github.com/mattpocock/skills/tree/main/skills/engineering/wayfinder)). `/wayfinder` grills the destination and creates the map + frontier tickets; `/wayfinder <ticket-ref>` points a session at a ticket (the model auto-detects its type); `/to-spec <map-ref>` converts a closed map into a `wayfinder:spec` successor issue (PRD hand-off). Tracker is autodetected (GitHub/GitLab/local `/tmp/.wayfinder/<repo>/`), overridable via `cwd/.mypi/wayfinder-tracker.sh`. Five primitives: Map, Decision, Prototype (worktree under `~/.worktrees/`), Research (user-spawned), Task. `/implement <ref>` turns a closed spec into merged, reviewed code — kickoff slices it into Development units (then cuts the `implement/<spec-slug>` trunk + creates the Implementation Map); working an open ticket drives Development → Code Review → Merge, with Follow-Up Development and Full Review. Six implementation primitives: Implementation Map, Development, Code Review, Follow-Up Development, Merge, Full Review |
+
+### Bundle dependencies
+
+Bundles are **composable**: a bundle's manifest may declare a `dependencies` field (a list of other bundle names). When you select a bundle — via a profile's `bundles` list or `mypi run --bundle <name>` — mypi **auto-activates its full transitive dependency closure**, so you only ever name the bundles you actually want.
+
+Resolution rules:
+
+- **Dependencies-first.** A dependency's resources are always emitted before those of the bundle that needs them. For example, selecting `repo-explorer` (a skill whose `SKILL.md` uses dynamic `!` shell blocks) auto-activates `dynamic-skills` (the extension that expands those blocks) and emits its `-e` flag first.
+- **Transitive.** If `a` depends on `b` and `b` depends on `c`, selecting `a` activates all three (`c`, then `b`, then `a`).
+- **Deduplicated across the whole command.** If two bundles share a dependency, or you list a dependency explicitly alongside a bundle that pulls it in, the shared dependency is loaded exactly once — never double-registering an extension's handlers via duplicate `-e` flags.
+- **Silent in `mypi configure`.** The editor only toggles the bundles you name; dependencies are pulled in at launch time, so you do not need to (and should not) select a dep explicitly.
+- **Fail-fast on cycles / missing bundles.** A circular dependency raises `Circular bundle dependency: a -> b -> a`; a dependency that names a non-existent bundle surfaces the standard "Bundle not found" error.
 
 ### Dynamic Skills
 
@@ -304,6 +329,162 @@ It exists because pi renders every assistant text block through its built-in `Ma
 **Dedupe.** `SessionManager` exposes no entry removal, so a naive toggle would stack duplicate raw copies. Instead, `/render-raw` only appends a new copy when the last assistant reply's text differs from the one already rendered (tracked in memory and reconstructed from the session on `/reload`, `/resume`, `/new`). Re-running `/render-raw` for the same reply notifies "last reply is already rendered raw" instead of duplicating; after a new reply it renders again.
 
 Enable it by adding `render-raw` to a profile's `bundles` list.
+
+### LLM Wiki
+
+The `llm-wiki` extension turns the agent into a **wiki manager** for an
+[Open Knowledge Format (OKF) v0.1](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md)
+wiki, following Karpathy's [LLM-wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f):
+the agent incrementally builds and maintains a persistent, interlinked
+markdown knowledge base — you curate sources and ask questions; it does all
+the summarising, cross-referencing, and bookkeeping that makes a knowledge
+base compound over time.
+
+A built-in `llm-wiki` profile ships with the wiki bundle enabled, plus the
+`mode` and `repo-explorer` bundles (the latter pulls in `dynamic-skills`
+automatically as a dependency):
+
+```bash
+mypi --profile llm-wiki
+mypi run --bundle llm-wiki   # ad hoc, no profile/config needed
+```
+
+**Two configurable values** (set via slash commands, persisted across
+sessions, restored on resume):
+
+| Value | Default | Meaning |
+|-------|---------|---------|
+| `wiki-root` | `wiki` (project-relative) | The OKF bundle root — a directory tree of markdown concept files with YAML frontmatter, `index.md`/`log.md`, and cross-links |
+| `wiki-spec` | `/SPEC.md` (wiki-root-relative, OKF §5.1) | A per-wiki **purpose & conventions** doc — the runtime context that tells the agent *which* wiki it is managing (Karpathy's "schema" layer) |
+
+Both auto-default on the first session start (write-once, sticky across
+resume); an explicit clear is also sticky and suppresses the default.
+
+**Auto-injection.** Each turn the extension reads `<wiki-spec>` and appends a
+`## Wiki Manager` section to the system prompt that first directs the agent to
+**read the full [OKF v0.1 spec](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md)**
+once per session (fetching it via `curl` before any other wiki work, and
+**stopping to inform the user** if it cannot be retrieved — wiki work is
+blocked until the spec can be read). The section then carries: the OKF format
+essentials (required `type` frontmatter, reserved filenames, leading-`/`
+bundle-relative links, `# Schema`/`# Examples`/`# Citations` conventions),
+the ingest/query/lint operating model, and the spec's contents verbatim. So
+the agent always knows the format *and* the specific wiki's purpose.
+
+**Commands:**
+
+| Command | Purpose |
+|---------|---------|
+| `/wiki-root [<path>]` | Set the wiki-root (no arg clears; re-defaults to `wiki`) |
+| `/wiki-spec [<path>]` | Set the wiki-spec path (no arg clears; re-defaults to `/SPEC.md`) |
+| `/wiki-init` | Scaffold the wiki-root and create **empty** `index.md`, `log.md`, and the spec (idempotent; creates assets only — no seeded content) |
+| `/wiki-ingest` | Inject the ingest workflow guidance (one-off message) |
+| `/wiki-query` | Inject the query workflow guidance (one-off message) |
+| `/wiki-lint` | Inject the lint workflow guidance (one-off message) |
+
+A typical first run: `mypi --profile llm-wiki`, then `/wiki-init`, open the
+empty spec and describe what the wiki is for, then `/wiki-ingest` and start
+adding sources. A `📚 wiki: <root>` indicator is shown in the footer while a
+wiki-root is active.
+
+The agent maintains the wiki with its **built-in** tools (`read`/`write`/
+`edit`/`bash`); the extension supplies only the operating context and the
+bootstrap/config commands. It has no bundle dependencies.
+
+### Wayfinder
+
+The `wayfinder` extension turns the agent into a **wayfinder**: it charts a
+large, foggy effort — too big for one agent session, where the way from here
+to the goal isn't visible yet — as a **shared map of decision tickets** on the
+repo's issue tracker, then resolves them one at a time until the way to the
+destination is clear (inspired by [mattpocock/skills
+`wayfinder`](https://github.com/mattpocock/skills/tree/main/skills/engineering/wayfinder)).
+It **plans, it doesn't do**: every ticket resolves a *decision* — a question to
+settle, not a slice of a build to execute.
+
+A built-in `wayfinder` profile ships with the wayfinder bundle enabled, plus
+the `mode` and `repo-explorer` bundles:
+
+```bash
+mypi --profile wayfinder
+mypi run --bundle wayfinder   # ad hoc, no profile/config needed
+```
+
+**Commands** (all three one-shot doctrine injectors — no persisted state, no
+per-turn system-prompt suffix, no footer). Each **clears the conversation
+first** so its doctrine is the agent's entire frame on a clean slate — the
+prior conversation is preserved as the parent session (recoverable via
+`/resume`). If the agent is mid-stream, the command **refuses** and asks you to
+wait and re-run once idle:
+
+| Command | Purpose |
+|---------|---------|
+| `/wayfinder` | Grill the destination, then create the map ticket and the primitive tickets for the frontier |
+| `/wayfinder <ticket-ref>` | Point this session at a specific ticket; the model auto-detects its primitive type and acts accordingly |
+| `/to-spec <map-ref>` | Convert a **closed** map into a `wayfinder:spec` **successor** issue — a PRD-style hand-off. Synthesises the map's Decisions + every closed child's resolution (+ codebase exploration) into the verbatim 7-section template, published in one shot (no confirm gate); re-run overwrites in place. Never writes the repo — the spec lives only as the issue body |
+| `/implement <ref>` | Turn a **closed** `wayfinder:spec` into merged, reviewed code. Auto-disambiguates: a closed spec → **kickoff** (propose a slicing, then on confirm cut the `implement/<spec-slug>` trunk + create the Implementation Map and Development children); any open implementation ticket → **work** it through its lifecycle (Development → Code Review → Merge, with Follow-Up Development and Full Review). Reviews are in-band (active-session model, user gate). Writes the repo (branches/merges) on all trackers |
+
+**Five primitives** (each a child issue of the `wayfinder:map` parent, or a
+`Type:` line locally):
+
+| Primitive | Resolved by | Closed when |
+|-----------|-------------|-------------|
+| **Map** | The index: Destination · Notes · Decisions so far · Not yet specified · Out of scope | The map **and** all its child tickets are closed |
+| **Decision** | A relentless one-question-at-a-time grilling (recommended answer each); the agent never answers for the human | The decision is made |
+| **Prototype** | Scaffold a worktree at `~/.worktrees/<map-slug>/<ticket-slug>/` and build a cheap artifact to react to | The user confirms a design, or new primitives are spun off to push the fog back |
+| **Research** | Investigate against primary sources and capture findings — **not** auto-launched; the user spawns a session and points it at the ticket | The fog is pushed back enough that the correct new primitives can be created |
+| **Task** | Manual work that must precede a decision (provision access, sign up for a service, move data); the agent drives where it can, else hands over a checklist | The work is done (the resolution records what was done + any resulting facts) |
+
+**Tracker autodetection.** The extension picks the tracker from the
+environment (it is not configured via a slash command): GitHub Issues for a
+`github.com` remote, GitLab Issues for a `gitlab.com` remote, otherwise a
+local-markdown fallback at `/tmp/.wayfinder/<repo>/` (ephemeral — `<repo>` is
+the cwd's directory name, wiped on reboot, never committed). A self-hosted
+escape hatch: if `cwd/.mypi/wayfinder-tracker.sh` exists and prints one of
+`local`/`github`/`gitlab`, that wins. The detected tracker is memoised for the
+session and surfaced via a `Wayfinder tracker: <kind>` notification.
+
+The agent does all tracker I/O with its **built-in** tools (`bash` → `gh` /
+`glab` / file writes); the extension supplies only the operating doctrine,
+composed with the correct tracker operations. Grilling is folded into the
+doctrine (no separate command). It declares `terminal-status` as a bundle
+dependency (not in profiles), so the terminal tab always reflects session
+state whenever wayfinder is active.
+
+**Map → spec hand-off.** When the map and all its children close, `/to-spec
+<map-ref>` converts it into a `wayfinder:spec` **successor** issue (linked both
+ways — produced, not a child) — a PRD-style hand-off adopting
+[mattpocock/skills `to-spec`](https://github.com/mattpocock/skills/tree/main/skills/engineering/to-spec)'s
+7-section template verbatim (Problem · Solution · User Stories · Implementation
+Decisions · Testing Decisions · Out of Scope · Further Notes). It synthesises
+from durable inputs only (the map's Decisions + every closed child's resolution
++ targeted codebase exploration — no live conversation), ingests prototype /
+research findings as a digest so the spec is self-contained, and publishes in
+one shot with **no confirm gate**; re-running overwrites the spec body in place
+(same successor link, stable URL). The spec lives **only** as the issue body —
+it never writes the repo (no `docs/specs/` mirror). This is the spec hand-off — `/implement` takes it from there.
+
+**Spec → implementation stage.** `/implement <ref>` turns a closed `wayfinder:spec` into merged, reviewed code — a third one-shot doctrine injector (same clear-then-inject, stateless) that auto-disambiguates by the reference it is given:
+
+- **`/implement <closed-spec-ref>` → kickoff.** Reads the spec, proposes a coarse slicing into independent Development units + an ordering, and waits for a yes/no. Nothing is created until confirmed; on confirm it cuts the per-effort integration trunk `implement/<spec-slug>` **from the current branch** (recorded in the Implementation Map as the base), then creates the Implementation Map, the Development children, and a Full Review child.
+- **`/implement <open-ticket-ref>` → work.** Dispatches by primitive type per a transition table: Development (switch to the unit's worktree+branch, do the work, commit, spawn a Code Review); Code Review (in-band review, findings + non-binding recommendation, then a user gate: approve → Merge, rework → Follow-Up Development); Follow-Up Development (rework on the parent Dev's branch, then re-review); Merge (`git merge --no-ff` into the trunk, cleanup, close the Dev); Full Review (review the integrated trunk vs the full spec; approve → close the map and leave the trunk→base merge to the user; rework → fresh Development children).
+
+**Six implementation primitives** (each a child of the `wayfinder:implementation-map` parent):
+
+| Primitive | Label | Closed when |
+|-----------|-------|-------------|
+| **Implementation Map** | `wayfinder:implementation-map` | A passing Full Review (it and all children closed) |
+| **Development** | `wayfinder:development` | Merged (the unit anchor Merge consumes) |
+| **Code Review** | `wayfinder:code-review` | Self, at its approve/rework gate |
+| **Follow-Up Development** | `wayfinder:follow-up-development` | Self, once its rework is committed |
+| **Merge** | `wayfinder:merge` | Self, after landing the unit on the trunk |
+| **Full Review** | `wayfinder:full-review` | A final approve (closes itself + the map) |
+
+**Branching.** One namespace keyed on the spec slug: trunk `implement/<spec-slug>` (cut from the current branch at kickoff, recorded as the base); dev-unit branch `dev/<spec-slug>/<n>-<slug>`; dev-unit worktree `~/.worktrees/<spec-slug>/<n>-<slug>` (materialised lazily, only when a unit starts). `<n>` is the raw ticket number (no padding). Merges are non-fast-forward; a hard conflict halts in place (never `--ours`/`--theirs`/`--abort`, never commits markers).
+
+**Reviews are in-band doctrine** — the agent becomes the reviewer for one turn using the active session model (switch with `/model`), posts findings + a non-binding recommendation, and stops; pass/fail is always a user gate. The standalone `code-review`/`code-review-prompt` bundles are deliberately not reused.
+
+Unlike `/to-spec`, `/implement` **writes the repo** (branches/merges) on all three trackers. On the local tracker, tickets are ephemeral scratch under `/tmp/.wayfinder/<repo>/` and the merged branch in cwd is the sole durable record of a finished effort. The final trunk→base merge is the user's (Full Review approves; it does not land).
 
 ## Development
 

@@ -1,0 +1,171 @@
+/**
+ * Wayfinder Extension
+ *
+ * Turns the agent into a **wayfinder**: chart a large, foggy effort (too big
+ * for one session) as a **map of decision tickets** on the repo's issue
+ * tracker, and resolve them one at a time until the way to the destination is
+ * clear. Inspired by [mattpocock/skills `wayfinder`][src], adapted to pi/mypi.
+ *
+ * The agent does all tracker I/O with its built-in tools (`bash` → `gh` /
+ * `glab` / file writes); this extension supplies only the operating doctrine,
+ * composed with the correct tracker operations for the detected tracker.
+ *
+ * Commands:
+ *   /wayfinder              — grill the destination, then create the map and
+ *                             the primitive tickets for the frontier.
+ *   /wayfinder <ticket-ref> — point this session at a ticket; the model
+ *                             auto-detects its primitive type and acts.
+ *   /to-spec <map-ref>      — convert a *closed* wayfinder map into a
+ *                             `wayfinder:spec` successor issue (PRD hand-off).
+ *   /implement <ref>        — turn a *closed* `wayfinder:spec` into merged,
+ *                             reviewed code. Auto-disambiguates: a closed spec
+ *                             → kickoff (slice + cut the trunk + create the
+ *                             Implementation Map); an open implementation
+ *                             ticket → work it through its lifecycle.
+ *
+ * All of these commands are one-shot doctrine injectors that **clear the
+ * conversation first** (`deliverDoctrine` → `ctx.newSession`), so the doctrine
+ * is the agent's entire frame on a clean slate. There is no persisted session
+ * state, no per-turn system-prompt suffix, and no footer. When the agent is
+ * mid-stream, each command refuses and warns the user to wait and re-run.
+ * The tracker is environment-derived (autodetected from the `origin` remote,
+ * with a `cwd/.mypi/wayfinder-tracker.sh` override) and memoised per session.
+ *
+ * [src]: https://github.com/mattpocock/skills/tree/main/skills/engineering/wayfinder
+ */
+
+import { existsSync } from "node:fs";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { deliverDoctrine } from "./deliver.js";
+import { repoSlug, trackerScriptPath } from "./paths.js";
+import {
+	buildChartDoctrine,
+	buildImplementDoctrine,
+	buildSpecDoctrine,
+	buildTicketDoctrine,
+} from "./prompt.js";
+import { detectTracker, type TrackerEnv, type TrackerKind } from "./tracker.js";
+
+/**
+ * Build the production `TrackerEnv` against `ctx` + the pi exec API.
+ *
+ * - `scriptExists`: sync `existsSync` on `cwd/.mypi/wayfinder-tracker.sh`.
+ * - `runScript`: `bash <script>` in `cwd`; stdout on success, `undefined` on
+ *   non-zero exit (falls through to autodetection).
+ * - `remoteUrl`: `git remote get-url origin` in `cwd`; trimmed stdout on
+ *   success, `undefined` on non-zero / thrown exec (no remote → local).
+ */
+function productionEnv(pi: ExtensionAPI, ctx: ExtensionContext): TrackerEnv {
+	const scriptPath = trackerScriptPath(ctx.cwd);
+	return {
+		scriptExists: () => existsSync(scriptPath),
+		runScript: async () => {
+			const { code, stdout } = await pi.exec("bash", [scriptPath], { cwd: ctx.cwd });
+			return code === 0 ? stdout : undefined;
+		},
+		remoteUrl: async () => {
+			const { code, stdout } = await pi.exec("git", ["remote", "get-url", "origin"], {
+				cwd: ctx.cwd,
+				timeout: 5000,
+			});
+			return code === 0 ? stdout.trim() : undefined;
+		},
+	};
+}
+
+export default function wayfinderExtension(pi: ExtensionAPI): void {
+	// Memoised per session: the tracker is environment-derived (not user-set),
+	// so it is computed once on first command use and cached for the session.
+	let cached: TrackerKind | undefined;
+
+	async function resolveTracker(ctx: ExtensionContext): Promise<TrackerKind> {
+		if (cached) return cached;
+		cached = await detectTracker(productionEnv(pi, ctx));
+		return cached;
+	}
+
+	pi.registerCommand("wayfinder", {
+		description: "Chart a wayfinder map (/wayfinder) or work a ticket (/wayfinder <ticket-ref>)",
+		handler: async (args, ctx) => {
+			const tracker = await resolveTracker(ctx);
+			const repo = repoSlug(ctx.cwd);
+			const ticketRef = args.trim();
+
+			ctx.ui.notify(`Wayfinder tracker: ${tracker}`, "info");
+
+			// The doctrine is a plain string built BEFORE the clear (it carries
+			// cleanly into the fresh session). `deliverDoctrine` centralises the
+			// clear-then-inject: it refuses while busy, else starts a new session
+			// (linked to this one via `parentSession`) and fires the doctrine as
+			// the sole message with `triggerTurn`.
+			if (ticketRef) {
+				await deliverDoctrine(
+					ctx,
+					"wayfinder-ticket",
+					buildTicketDoctrine({ tracker, repo, ticketRef }),
+				);
+			} else {
+				await deliverDoctrine(ctx, "wayfinder-chart", buildChartDoctrine({ tracker, repo }));
+			}
+		},
+	});
+
+	// `/to-spec <map-ref>`: convert a closed wayfinder map into a spec issue.
+	// A second one-shot doctrine injector in the same bundle, kept distinct
+	// from `/wayfinder` (which works a single ticket): the spec stage consumes
+	// a whole map. Same clear-then-inject as `/wayfinder` (refuses while busy,
+	// else clears and fires the doctrine as the sole message).
+	pi.registerCommand("to-spec", {
+		description: "Convert a closed wayfinder map into a wayfinder:spec issue (/to-spec <map-ref>)",
+		handler: async (args, ctx) => {
+			const tracker = await resolveTracker(ctx);
+			const repo = repoSlug(ctx.cwd);
+			const mapRef = args.trim();
+
+			ctx.ui.notify(`Wayfinder to-spec tracker: ${tracker}`, "info");
+
+			if (!mapRef) {
+				ctx.ui.notify(
+					"Usage: /to-spec <map-ref> — pass the closed map's issue number/URL (or local effort slug/path).",
+					"error",
+				);
+				return;
+			}
+
+			await deliverDoctrine(ctx, "wayfinder-spec", buildSpecDoctrine({ tracker, repo, mapRef }));
+		},
+	});
+
+	// `/implement <ref>`: turn a closed `wayfinder:spec` into merged, reviewed
+	// code. A third one-shot doctrine injector in the same bundle, mirroring
+	// `/to-spec`'s shape: bare `/implement` is a usage error; `/implement <ref>`
+	// auto-disambiguates at the doctrine layer (a closed spec → kickoff; any
+	// open wayfinder implementation ticket → work that ticket). Same clear-
+	// then-inject as the other two (refuses while busy, else clears and fires
+	// the doctrine as the sole message).
+	pi.registerCommand("implement", {
+		description:
+			"Implement a closed wayfinder:spec (/implement <spec-ref> kickoff) or work an implementation ticket (/implement <ticket-ref>)",
+		handler: async (args, ctx) => {
+			const tracker = await resolveTracker(ctx);
+			const repo = repoSlug(ctx.cwd);
+			const ref = args.trim();
+
+			ctx.ui.notify(`Wayfinder implement tracker: ${tracker}`, "info");
+
+			if (!ref) {
+				ctx.ui.notify(
+					"Usage: /implement <ref> — pass a closed wayfinder:spec (kickoff) or an open wayfinder implementation ticket (work it).",
+					"error",
+				);
+				return;
+			}
+
+			await deliverDoctrine(
+				ctx,
+				"wayfinder-implement",
+				buildImplementDoctrine({ tracker, repo, ref }),
+			);
+		},
+	});
+}
