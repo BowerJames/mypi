@@ -48,10 +48,15 @@ describe("expandBundleArgs — shared expander (deep module)", () => {
 
 		it("auto-activates wayfinder's terminal-status dependency, emitted first", async () => {
 			const out = await expandBundleArgs(["wayfinder"]);
-			// terminal-status (pi-extension) must precede wayfinder (pi-extension).
-			expect(out).toEqual(["-e", out[1], "-e", out[3]]);
+			// terminal-status (pi-extension) must precede wayfinder (pi-extension);
+			// wayfinder's thirteen skills then follow as --skill flags.
+			expect(out[0]).toBe("-e");
 			expect(out[1]).toContain(bundleEntry("terminal-status"));
+			expect(out[2]).toBe("-e");
 			expect(out[3]).toContain(bundleEntry("wayfinder"));
+			const skillFlags = out.slice(4);
+			expect(skillFlags.length).toBe(26); // 13 × ("--skill", <path>)
+			expect(skillFlags.filter((t) => t === "--skill")).toHaveLength(13);
 		});
 	});
 

@@ -103,12 +103,16 @@ describe("loadBundle / expandBundle", () => {
 		expect(existsSync(resolve(BUNDLES_DIR, "repo-explorer", "skills", "repo-explorer"))).toBe(true);
 	});
 
-	it("expands wayfinder to a single pi-extension file that exists on disk", async () => {
+	it("expands wayfinder to its pi-extension plus thirteen skills that exist on disk", async () => {
 		const resolved = await expandBundle("wayfinder");
 		expect(resolved.piExtensions.length).toBe(1);
-		expect(resolved.skills).toEqual([]);
-		expect(resolved.prompts).toEqual([]);
 		expect(existsSync(resolved.piExtensions[0])).toBe(true);
+		expect(resolved.prompts).toEqual([]);
+		// wayfinder ships thirteen model-invocable skills (one per label).
+		expect(resolved.skills.length).toBe(13);
+		for (const skill of resolved.skills) {
+			expect(existsSync(skill)).toBe(true);
+		}
 	});
 
 	it("throws on an unknown bundle", async () => {
