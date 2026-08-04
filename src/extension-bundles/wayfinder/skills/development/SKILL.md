@@ -22,7 +22,7 @@ This skill loads when the overview dispatches an **open `wayfinder:development`*
 2. **Materialise the unit branch + worktree** if not yet present (lazy): `git branch dev/<spec-slug>/<n>-<slug> <trunk>` then `git worktree add ~/.worktrees/<spec-slug>/<n>-<slug> dev/<spec-slug>/<n>-<slug>`. The first round materialises; rework rounds reuse them.
 3. **Switch to the worktree + branch** and **do the work** — the slice scope owned by this unit, honouring the spec's Implementation Decisions.
 4. **Commit** on the unit branch. Refer to the ticket by its **title** in the commit message.
-5. **Spawn a `unit-review`** (linked to this `unit-map`; it reads the requirements from the `unit-map` + spec). Carry a soft `Blocked by: commits on dev/<spec-slug>/<n>-<slug>` line, cleared once the branch has ≥1 commit beyond the trunk.
+5. **Spawn a `unit-review`** (linked to this `unit-map`; it reads the requirements from the `unit-map` + spec). Runnability — ≥1 commit on the unit branch beyond the trunk — is a runtime check the `unit-review` skill applies at its own gate; `development` does not prescribe it (concept gates are never `Blocked by:` lines).
 6. **Self-close.** The round is done once committed and the review is spawned — `development` is fire-and-forget; it does **not** wait for the review, and it does **not** stay open until merge. The unit's landing is tracked by the `unit-map` composite, not by holding this round open.
 
 ## Rework folds in

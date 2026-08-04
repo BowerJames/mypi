@@ -39,6 +39,6 @@ Either way `unit-review` self-closes at the gate; the outcome is the user's call
 
 ## Eligibility — a runnability gate, not a creation gate
 
-A `unit-review` can be created anytime; it carries a soft `Blocked by: commits on dev/<spec-slug>/<n>-<slug>` body line. Run the review once the branch has ≥1 commit beyond the recorded trunk, then clear the line.
+A `unit-review` can be created anytime; it is **runnable** once the unit branch `dev/<spec-slug>/<n>-<slug>` has ≥1 commit beyond the recorded trunk. This commit-runnability is a **runtime check** — the overview scans the branch before dispatching and runs the review once the branch has moved. It is **never** a `Blocked by:` body line: concept gates are workflow doctrine applied at runtime; `Blocked by:` is reserved for concrete issue-to-issue deps.
 
 > The shared meta-doctrine and the tracker-ops section ride in the **always-injected overview**. Read `development` (what was built) and `merge` (what approve triggers) for foresight.

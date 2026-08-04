@@ -18,7 +18,7 @@ This skill loads when the overview dispatches an **open `wayfinder:implementatio
 
 ## Eligibility — a runtime check (dynamic child set)
 
-`implementation-review` is created at kickoff but carries a soft, **recomputed** `Blocked by: all other implementation tickets closed` line. It is kept off the frontier until **every other** `implementation-map` child is closed. The child set is dynamic (`unit-map`s, rework `development` rounds, etc. appear mid-effort), so this is a **runtime re-scan**, never static `blocked_by` IDs.
+`implementation-review` is created at kickoff but is **kept off the frontier** until **every other** `implementation-map` child is closed. The child set is dynamic (`unit-map`s, rework `development` rounds, etc. appear mid-effort), so "all other children closed" is a **runtime re-scan** the overview recomputes before dispatching — **never** a `Blocked by:` body line and never static `blocked_by` IDs. Concept gates are workflow doctrine applied at runtime; `Blocked by:` is reserved for concrete issue-to-issue deps (e.g. the successor `implementation-review` ← its rework `unit-map`s, a static set known at spawn).
 
 ## Run the review
 

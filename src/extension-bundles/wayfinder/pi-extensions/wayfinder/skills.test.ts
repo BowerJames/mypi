@@ -205,6 +205,16 @@ describe("wayfinder skills — the new taxonomy", () => {
 	});
 });
 
+describe("wayfinder skills — concept gates are never `Blocked by:` lines", () => {
+	it("unit-review — commit-runnability is runtime doctrine, not a `Blocked by:` line", () => {
+		expect(LOADED["unit-review"].body).not.toContain("`Blocked by: commits");
+	});
+
+	it("implementation-review — all-children-closed is runtime doctrine, not a `Blocked by:` line", () => {
+		expect(LOADED["implementation-review"].body).not.toContain("`Blocked by: all other");
+	});
+});
+
 describe("wayfinder skills — manifest wires all thirteen", () => {
 	it("the manifest skills slot lists exactly the thirteen label dirs", () => {
 		expect(manifest.skills).toHaveLength(13);
