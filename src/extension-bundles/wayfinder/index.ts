@@ -42,7 +42,27 @@ const here = dirname(fileURLToPath(import.meta.url));
 export default {
 	name: "wayfinder",
 	piExtensions: [join(here, "pi-extensions", "wayfinder", "index.ts")],
-	skills: [],
+	// Thirteen model-invocable skills — one per `wayfinder:<label>` — carrying
+	// the phase how-to for each type. The always-injected overview (dispatch
+	// table + meta-doctrine + taxonomy + tracker-ops) is composed by the command
+	// handler; these skills are pulled on demand by the resolved label, and kept
+	// model-invocable (no `disable-model-invocation`) so the agent can read
+	// *other* phase skills for foresight.
+	skills: [
+		join(here, "skills", "map"),
+		join(here, "skills", "plan-map"),
+		join(here, "skills", "decision"),
+		join(here, "skills", "prototype"),
+		join(here, "skills", "research"),
+		join(here, "skills", "task"),
+		join(here, "skills", "spec"),
+		join(here, "skills", "implementation-map"),
+		join(here, "skills", "unit-map"),
+		join(here, "skills", "development"),
+		join(here, "skills", "unit-review"),
+		join(here, "skills", "merge"),
+		join(here, "skills", "implementation-review"),
+	],
 	prompts: [],
 	dependencies: ["terminal-status"],
 } satisfies ExtensionBundleManifest;
