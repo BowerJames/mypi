@@ -1,35 +1,41 @@
 /**
- * Wayfinder Extension
+ * Wayfinder Extension — the single unified command.
  *
- * Turns the agent into a **wayfinder**: chart a large, foggy effort (too big
- * for one session) as a **map of decision tickets** on the repo's issue
- * tracker, and resolve them one at a time until the way to the destination is
- * clear. Inspired by [mattpocock/skills `wayfinder`][src], adapted to pi/mypi.
+ * Turns the agent into a **wayfinder**: chart a large, foggy effort as a
+ * **map of tickets** on the repo's issue tracker and resolve them one at a
+ * time until the way to the destination is clear. Inspired by
+ * [mattpocock/skills `wayfinder`][src], adapted to pi/mypi.
  *
- * The agent does all tracker I/O with its built-in tools (`bash` → `gh` /
- * `glab` / file writes); this extension supplies only the operating doctrine,
- * composed with the correct tracker operations for the detected tracker.
+ * **One command.** `/wayfinder <ref>` — where `<ref>` is an issue number, a
+ * full URL, a *description* (resolved via search), or nothing (chart). The
+ * command's only TypeScript work is:
  *
- * Commands:
- *   /wayfinder              — grill the destination, then create the map and
- *                             the primitive tickets for the frontier.
- *   /wayfinder <ticket-ref> — point this session at a ticket; the model
- *                             auto-detects its primitive type and acts.
- *   /to-spec <map-ref>      — convert a *closed* wayfinder map into a
- *                             `wayfinder:spec` successor issue (PRD hand-off).
- *   /implement <ref>        — turn a *closed* `wayfinder:spec` into merged,
- *                             reviewed code. Auto-disambiguates: a closed spec
- *                             → kickoff (slice + cut the trunk + create the
- *                             Implementation Map); an open implementation
- *                             ticket → work it through its lifecycle.
+ * 1. **detect the tracker** (reusing today's `git remote` autodetect + optional
+ *    `.mypi/wayfinder-tracker.sh` override), so the overview injects the right
+ *    tracker-ops section;
+ * 2. **clear the conversation**; then
+ * 3. **inject** the always-injected overview (`buildOverview`) + a one-line
+ *    resolution directive.
  *
- * All of these commands are one-shot doctrine injectors that **clear the
- * conversation first** (`deliverDoctrine` → `ctx.newSession`), so the doctrine
- * is the agent's entire frame on a clean slate. There is no persisted session
- * state, no per-turn system-prompt suffix, and no footer. When the agent is
- * mid-stream, each command refuses and warns the user to wait and re-run.
- * The tracker is environment-derived (autodetected from the `origin` remote,
- * with a `cwd/.mypi/wayfinder-tracker.sh` override) and memoised per session.
+ * Ref-**resolution is the agent's first turn**, not the command's: only the
+ * agent can resolve all four ref forms (a *description* needs
+ * `gh issue list --search`, an LLM judgement, not a static TypeScript lookup).
+ * So the command never reads the issue; it injects the overview + a directive
+ * telling the agent to resolve `<ref>`, read its `wayfinder:<type>` label +
+ * state, apply the dispatch table, read the matching skill, and act. `/to-spec`
+ * and `/implement` are deleted; their work is absorbed (a `spec` ref → the
+ * `spec` skill; an implementation ref → its skill).
+ *
+ * `--help` / `-h` carries the dispatch table (the replacement for the deleted
+ * surfaces), satisfying the repo's AGENTS.md "every route needs a `--help`".
+ *
+ * The injection routes through the existing **`deliverDoctrine`** deep module
+ * (unchanged clear-then-inject helper: busy → refuse-and-warn, idle →
+ * `ctx.newSession` linked via `parentSession` then `sendMessage` with
+ * `triggerTurn`). There is no persisted session state, no per-turn system-prompt
+ * suffix, and no footer. The tracker is environment-derived (autodetected from
+ * the `origin` remote, with a `cwd/.mypi/wayfinder-tracker.sh` override) and
+ * memoised per session.
  *
  * [src]: https://github.com/mattpocock/skills/tree/main/skills/engineering/wayfinder
  */
@@ -37,13 +43,8 @@
 import { existsSync } from "node:fs";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { deliverDoctrine } from "./deliver.js";
+import { buildOverview } from "./overview.js";
 import { repoSlug, trackerScriptPath } from "./paths.js";
-import {
-	buildChartDoctrine,
-	buildImplementDoctrine,
-	buildSpecDoctrine,
-	buildTicketDoctrine,
-} from "./prompt.js";
 import { detectTracker, type TrackerEnv, type TrackerKind } from "./tracker.js";
 
 /**
@@ -85,87 +86,93 @@ export default function wayfinderExtension(pi: ExtensionAPI): void {
 	}
 
 	pi.registerCommand("wayfinder", {
-		description: "Chart a wayfinder map (/wayfinder) or work a ticket (/wayfinder <ticket-ref>)",
+		description:
+			"Unified wayfinder: chart (/wayfinder) or work a ticket/map by label+state (/wayfinder <ref>)",
 		handler: async (args, ctx) => {
+			const ref = args.trim();
+
+			// `--help` / `-h` carries the dispatch table — the replacement for the
+			// deleted `/to-spec` / `/implement` surfaces (AGENTS.md: every route
+			// needs a --help). Tracker-agnostic (the table is label+state → skill),
+			// so it short-circuits before the tracker is detected and the
+			// conversation is cleared.
+			if (ref === "--help" || ref === "-h") {
+				ctx.ui.notify(helpText(), "info");
+				return;
+			}
+
+			// The command's only TypeScript I/O: detect the tracker (today's
+			// `git remote` autodetect) BEFORE the inject, so the overview carries
+			// the correct tracker-ops section. Ref RESOLUTION is the agent's first
+			// turn, not the command's.
 			const tracker = await resolveTracker(ctx);
 			const repo = repoSlug(ctx.cwd);
-			const ticketRef = args.trim();
 
 			ctx.ui.notify(`Wayfinder tracker: ${tracker}`, "info");
 
-			// The doctrine is a plain string built BEFORE the clear (it carries
-			// cleanly into the fresh session). `deliverDoctrine` centralises the
-			// clear-then-inject: it refuses while busy, else starts a new session
-			// (linked to this one via `parentSession`) and fires the doctrine as
-			// the sole message with `triggerTurn`.
-			if (ticketRef) {
-				await deliverDoctrine(
-					ctx,
-					"wayfinder-ticket",
-					buildTicketDoctrine({ tracker, repo, ticketRef }),
-				);
-			} else {
-				await deliverDoctrine(ctx, "wayfinder-chart", buildChartDoctrine({ tracker, repo }));
-			}
-		},
-	});
-
-	// `/to-spec <map-ref>`: convert a closed wayfinder map into a spec issue.
-	// A second one-shot doctrine injector in the same bundle, kept distinct
-	// from `/wayfinder` (which works a single ticket): the spec stage consumes
-	// a whole map. Same clear-then-inject as `/wayfinder` (refuses while busy,
-	// else clears and fires the doctrine as the sole message).
-	pi.registerCommand("to-spec", {
-		description: "Convert a closed wayfinder map into a wayfinder:spec issue (/to-spec <map-ref>)",
-		handler: async (args, ctx) => {
-			const tracker = await resolveTracker(ctx);
-			const repo = repoSlug(ctx.cwd);
-			const mapRef = args.trim();
-
-			ctx.ui.notify(`Wayfinder to-spec tracker: ${tracker}`, "info");
-
-			if (!mapRef) {
-				ctx.ui.notify(
-					"Usage: /to-spec <map-ref> — pass the closed map's issue number/URL (or local effort slug/path).",
-					"error",
-				);
-				return;
-			}
-
-			await deliverDoctrine(ctx, "wayfinder-spec", buildSpecDoctrine({ tracker, repo, mapRef }));
-		},
-	});
-
-	// `/implement <ref>`: turn a closed `wayfinder:spec` into merged, reviewed
-	// code. A third one-shot doctrine injector in the same bundle, mirroring
-	// `/to-spec`'s shape: bare `/implement` is a usage error; `/implement <ref>`
-	// auto-disambiguates at the doctrine layer (a closed spec → kickoff; any
-	// open wayfinder implementation ticket → work that ticket). Same clear-
-	// then-inject as the other two (refuses while busy, else clears and fires
-	// the doctrine as the sole message).
-	pi.registerCommand("implement", {
-		description:
-			"Implement a closed wayfinder:spec (/implement <spec-ref> kickoff) or work an implementation ticket (/implement <ticket-ref>)",
-		handler: async (args, ctx) => {
-			const tracker = await resolveTracker(ctx);
-			const repo = repoSlug(ctx.cwd);
-			const ref = args.trim();
-
-			ctx.ui.notify(`Wayfinder implement tracker: ${tracker}`, "info");
-
-			if (!ref) {
-				ctx.ui.notify(
-					"Usage: /implement <ref> — pass a closed wayfinder:spec (kickoff) or an open wayfinder implementation ticket (work it).",
-					"error",
-				);
-				return;
-			}
-
-			await deliverDoctrine(
-				ctx,
-				"wayfinder-implement",
-				buildImplementDoctrine({ tracker, repo, ref }),
+			// Injected body = the always-injected overview (shared frame, incl.
+			// tracker-ops) + a one-line resolution directive. `deliverDoctrine`
+			// centralises the clear-then-inject: it refuses while busy, else starts
+			// a new session (linked to this one via `parentSession`) and fires the
+			// overview as the sole message with `triggerTurn`.
+			const body = [buildOverview({ tracker, repo }), "", "---", "", resolveDirective(ref)].join(
+				"\n",
 			);
+
+			await deliverDoctrine(ctx, "wayfinder", body);
 		},
 	});
+}
+
+/**
+ * The `--help` text — the dispatch table, the four ref forms, and a pointer to
+ * the skills. Tracker-agnostic (the table is label + state → skill), so it is
+ * emitted without detecting the tracker or clearing the conversation.
+ */
+function helpText(): string {
+	return [
+		"Usage: /wayfinder [<ref>]   — chart (no arg) or work a ticket/map",
+		"",
+		"<ref> may be: an issue number, a full issue URL, a description (resolved",
+		"via search), or omitted (chart a new map). Resolution is the agent's first",
+		"turn — the command injects only the overview + a one-line directive.",
+		"",
+		"Dispatch (label + state → skill to read):",
+		"  (no arg)              map                 → chart the destination + frontier",
+		"  wayfinder:map         map                 → work the umbrella map",
+		"  wayfinder:plan-map    plan-map            → drive the planning phase",
+		"  decision/prototype/   that skill          → work a planning primitive",
+		"  research/task",
+		"  wayfinder:spec        spec                → synthesise (open) / implement-kickoff (closed)",
+		"  implementation-map    (redirect)          → point at the frontier unit-map/development",
+		"  unit-map              unit-map            → drive one mergeable unit",
+		"  development           development         → one coding round (incl. rework)",
+		"  unit-review           unit-review         → review a development branch",
+		"  merge                 merge               → land a unit on the trunk",
+		"  implementation-review implementation-review → review the integrated trunk",
+		"",
+		"Phase doctrine lives in one skill per label; this command injects only the",
+		"compact overview (dispatch + meta-doctrine + taxonomy + tracker-ops) + a",
+		"one-line directive telling the agent to resolve <ref> and read its skill.",
+		"",
+		"Refuses while the agent is busy (re-run once idle).",
+	].join("\n");
+}
+
+/**
+ * The one-line directive appended after the overview. Tells the agent to
+ * resolve `<ref>` (number / URL / description / nothing) to a ticket, read its
+ * `wayfinder:<type>` label + state, and dispatch per the overview's table.
+ */
+function resolveDirective(ref: string): string {
+	if (!ref) {
+		return "**Chart.** No reference given → grill the destination and create the `map` + frontier tickets (read the `map` skill).";
+	}
+	return [
+		`You are working \`${ref}\`.`,
+		"**Resolve it first** (one step, per the tracker operations above):",
+		"- number or URL → `gh issue view <ref>` (or the `glab` / local equivalent) and read its `wayfinder:<type>` label + state;",
+		'- description → `gh issue list --search "<ref>"` (or equivalent) and pick the match; if several, ask the user **one** question to disambiguate.',
+		"Then apply the dispatch table above: read the matching skill and act. (If the ref isn't a wayfinder ticket, say so and stop.)",
+	].join("\n");
 }

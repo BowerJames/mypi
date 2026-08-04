@@ -3,12 +3,13 @@ import { describe, expect, it } from "vitest";
 import wayfinderExtension from "./index.js";
 
 /**
- * Handler wiring tests. Drives the real registered handlers with a minimal
- * fake `pi` (`registerCommand` captures handlers; `exec` returns a GitHub
- * remote so the autodetected tracker is `github` — the override script is
- * absent at the fake cwd, so no `bash` exec is exercised) + a fake
- * `ExtensionCommandContext` whose `newSession` records calls and forwards the
- * `withSession` callback a fake `ReplacedSessionContext.sendMessage`.
+ * Handler wiring tests for the single unified command. Drives the real
+ * registered handler with a minimal fake `pi` (`registerCommand` captures
+ * handlers; `exec` returns a GitHub remote so the autodetected tracker is
+ * `github` — the override script is absent at the fake cwd, so no `bash` exec
+ * is exercised) + a fake `ExtensionCommandContext` whose `newSession` records
+ * calls and forwards the `withSession` callback a fake
+ * `ReplacedSessionContext.sendMessage`.
  */
 
 interface DoctrineMessage {
@@ -88,30 +89,110 @@ function setup(over: { idle?: boolean; sessionFile?: string } = {}) {
 	return { commands, ctx, calls };
 }
 
-describe("/wayfinder", () => {
-	it("notifies the autodetected tracker, then injects the chart doctrine on a clean slate", async () => {
+describe("registration — exactly one command", () => {
+	it("registers only `wayfinder` (to-spec/implement are gone)", () => {
+		const { commands } = setup();
+		expect(commands.has("wayfinder")).toBe(true);
+		expect(commands.has("to-spec")).toBe(false);
+		expect(commands.has("implement")).toBe(false);
+	});
+});
+
+describe("/wayfinder --help / -h", () => {
+	for (const flag of ["--help", "-h"]) {
+		it(`${flag} emits the dispatch table and does not clear or inject`, async () => {
+			const { commands, ctx, calls } = setup();
+			await handler(commands, "wayfinder")(flag, ctx);
+
+			// the table is notified (info); the conversation is never cleared and
+			// nothing is injected.
+			expect(calls.newSession).toHaveLength(0);
+			expect(calls.sendMessage).toHaveLength(0);
+			expect(calls.notify).toHaveLength(1);
+			expect(calls.notify[0]?.type).toBe("info");
+			const help = calls.notify[0]?.message ?? "";
+			expect(help).toContain("Usage: /wayfinder [<ref>]");
+			expect(help).toContain("Dispatch (label + state → skill to read):");
+			// a couple of representative rows
+			expect(help).toContain("wayfinder:spec");
+			expect(help).toContain("implementation-map    (redirect)");
+			expect(help).toContain("implementation-review");
+			// the four ref forms
+			expect(help).toContain("issue number");
+			expect(help).toContain("description");
+		});
+	}
+});
+
+describe("/wayfinder (bare — chart)", () => {
+	it("notifies the autodetected tracker, then injects the overview + chart directive on a clean slate", async () => {
 		const { commands, ctx, calls } = setup();
 		await handler(commands, "wayfinder")("", ctx);
 
 		expect(calls.notify[0]).toEqual({ message: "Wayfinder tracker: github", type: "info" });
 		expect(calls.newSession).toEqual([{ parentSession: "/sessions/parent.jsonl" }]);
 		expect(calls.sendMessage).toHaveLength(1);
-		expect(calls.sendMessage[0]?.message.customType).toBe("wayfinder-chart");
+		expect(calls.sendMessage[0]?.message.customType).toBe("wayfinder");
 		expect(calls.sendMessage[0]?.message.display).toBe(true);
 		expect(calls.sendMessage[0]?.options).toEqual({ triggerTurn: true });
+
+		// the injected body is the overview (dispatch table) + the chart directive
+		const body = calls.sendMessage[0]?.message.content ?? "";
+		expect(body).toContain("chart the fog, resolve one ticket at a time");
+		expect(body).toContain("#### Dispatch table");
+		expect(body).toContain("**Chart.**");
 	});
 
-	it("with a ticket-ref injects the ticket doctrine embedding the ref", async () => {
+	it("detects the tracker BEFORE injecting (notify precedes the clear)", async () => {
+		const { commands, ctx, calls } = setup();
+		await handler(commands, "wayfinder")("", ctx);
+
+		// notify is the first recorded side effect, before newSession
+		expect(calls.notify[0]?.message).toBe("Wayfinder tracker: github");
+		// exactly one tracker notify (no per-command duplication now that there
+		// is one command)
+		const trackerNotifies = calls.notify.filter((n) => n.message.startsWith("Wayfinder tracker"));
+		expect(trackerNotifies).toHaveLength(1);
+	});
+});
+
+describe("/wayfinder <ref>", () => {
+	it("injects the overview + a resolution directive embedding the ref", async () => {
 		const { commands, ctx, calls } = setup();
 		await handler(commands, "wayfinder")("42", ctx);
 
 		expect(calls.sendMessage).toHaveLength(1);
-		expect(calls.sendMessage[0]?.message.customType).toBe("wayfinder-ticket");
-		expect(calls.sendMessage[0]?.message.content).toContain("`42`");
-		expect(calls.sendMessage[0]?.options).toEqual({ triggerTurn: true });
+		expect(calls.sendMessage[0]?.message.customType).toBe("wayfinder");
+		const body = calls.sendMessage[0]?.message.content ?? "";
+		// overview rides in the body
+		expect(body).toContain("#### Dispatch table");
+		// resolution directive embeds the ref and tells the agent to resolve it
+		expect(body).toContain("You are working `42`");
+		expect(body).toContain("Resolve it first");
+		expect(body).toContain("gh issue view");
 	});
 
-	it("refuses while busy (no clear, no inject)", async () => {
+	it("supports a URL ref (resolution is the agent's turn — command does not read the issue)", async () => {
+		const { commands, ctx, calls } = setup();
+		const url = "https://github.com/owner/repo/issues/42";
+		await handler(commands, "wayfinder")(url, ctx);
+
+		expect(calls.sendMessage).toHaveLength(1);
+		expect(calls.sendMessage[0]?.message.content).toContain(`You are working \`${url}\``);
+	});
+
+	it("supports a description ref (the directive points at gh issue list --search)", async () => {
+		const { commands, ctx, calls } = setup();
+		await handler(commands, "wayfinder")("the unified wayfinder overview", ctx);
+
+		const body = calls.sendMessage[0]?.message.content ?? "";
+		expect(body).toContain("You are working `the unified wayfinder overview`");
+		expect(body).toContain("gh issue list --search");
+	});
+});
+
+describe("/wayfinder — busy guard", () => {
+	it("refuses while busy (no clear, no inject) for the bare command", async () => {
 		const { commands, ctx, calls } = setup({ idle: false });
 		await handler(commands, "wayfinder")("", ctx);
 
@@ -122,67 +203,10 @@ describe("/wayfinder", () => {
 			type: "warning",
 		});
 	});
-});
 
-describe("/to-spec", () => {
-	it("injects the spec doctrine on a clean slate", async () => {
-		const { commands, ctx, calls } = setup();
-		await handler(commands, "to-spec")("42", ctx);
-
-		expect(calls.notify[0]).toEqual({ message: "Wayfinder to-spec tracker: github", type: "info" });
-		expect(calls.newSession).toEqual([{ parentSession: "/sessions/parent.jsonl" }]);
-		expect(calls.sendMessage).toHaveLength(1);
-		expect(calls.sendMessage[0]?.message.customType).toBe("wayfinder-spec");
-		expect(calls.sendMessage[0]?.options).toEqual({ triggerTurn: true });
-	});
-
-	it("with no map-ref shows the usage error and does not clear", async () => {
-		const { commands, ctx, calls } = setup();
-		await handler(commands, "to-spec")("   ", ctx);
-
-		expect(calls.newSession).toHaveLength(0);
-		expect(calls.sendMessage).toHaveLength(0);
-		expect(calls.notify).toContainEqual({
-			message:
-				"Usage: /to-spec <map-ref> — pass the closed map's issue number/URL (or local effort slug/path).",
-			type: "error",
-		});
-	});
-});
-
-describe("/implement", () => {
-	it("notifies the autodetected tracker, then injects the implement doctrine on a clean slate", async () => {
-		const { commands, ctx, calls } = setup();
-		await handler(commands, "implement")("74", ctx);
-
-		expect(calls.notify[0]).toEqual({
-			message: "Wayfinder implement tracker: github",
-			type: "info",
-		});
-		expect(calls.newSession).toEqual([{ parentSession: "/sessions/parent.jsonl" }]);
-		expect(calls.sendMessage).toHaveLength(1);
-		expect(calls.sendMessage[0]?.message.customType).toBe("wayfinder-implement");
-		expect(calls.sendMessage[0]?.message.content).toContain("/implement 74");
-		expect(calls.sendMessage[0]?.message.display).toBe(true);
-		expect(calls.sendMessage[0]?.options).toEqual({ triggerTurn: true });
-	});
-
-	it("with no ref shows the usage error and does not clear", async () => {
-		const { commands, ctx, calls } = setup();
-		await handler(commands, "implement")("   ", ctx);
-
-		expect(calls.newSession).toHaveLength(0);
-		expect(calls.sendMessage).toHaveLength(0);
-		expect(calls.notify).toContainEqual({
-			message:
-				"Usage: /implement <ref> — pass a closed wayfinder:spec (kickoff) or an open wayfinder implementation ticket (work it).",
-			type: "error",
-		});
-	});
-
-	it("refuses while busy (no clear, no inject)", async () => {
+	it("refuses while busy for /wayfinder <ref>", async () => {
 		const { commands, ctx, calls } = setup({ idle: false });
-		await handler(commands, "implement")("74", ctx);
+		await handler(commands, "wayfinder")("42", ctx);
 
 		expect(calls.newSession).toHaveLength(0);
 		expect(calls.sendMessage).toHaveLength(0);
