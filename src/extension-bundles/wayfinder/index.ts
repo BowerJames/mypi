@@ -6,19 +6,15 @@
  * the repo's issue tracker, and resolve them one at a time until the way to
  * the destination is clear.
  *
- * Four commands (each a one-shot doctrine injector that clears the
- * conversation first, so the doctrine is the agent's entire frame):
- *   /wayfinder              — grill the destination, then create the map and
- *                             the primitive tickets for the frontier.
- *   /wayfinder <ticket-ref> — point this session at a ticket; the model
- *                             auto-detects its primitive type and acts.
- *   /to-spec <map-ref>      — convert a *closed* wayfinder map into a
- *                             `wayfinder:spec` successor issue (PRD hand-off).
- *   /implement <ref>        — turn a *closed* `wayfinder:spec` into merged,
- *                             reviewed code. Auto-disambiguates: a closed spec
- *                             → kickoff (slice + cut the trunk + create the
- *                             Implementation Map); an open implementation
- *                             ticket → work it through its lifecycle.
+ * One command — `/wayfinder <ref>` — a one-shot doctrine injector that clears
+ * the conversation first, so the doctrine is the agent's entire frame. `<ref>`
+ * is a number, URL, *description* (resolved via search), or nothing (chart):
+ * the command detects the tracker, then injects a compact **always-injected
+ * overview** (dispatch table + meta-doctrine + 13-label taxonomy + tracker-ops)
+ * and a directive; the model auto-disambiguates by the ticket's
+ * `wayfinder:<type>` label + state and reads the phase how-to from the matching
+ * model-invocable skill below. The old `/to-spec` and `/implement` routes are
+ * gone — both were absorbed into the single dispatch.
  *
  * The extension detects the tracker at runtime (GitHub / GitLab / local
  * markdown) and composes the doctrine with the correct tracker operations,

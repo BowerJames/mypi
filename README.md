@@ -493,10 +493,12 @@ label: `development` (switch to the unit's worktree+branch, do the work,
 commit, spawn a `unit-review`); `unit-review` (in-band review, findings +
 non-binding recommendation, then a user gate: approve → `merge`, rework →
 another `development` round on the same branch); `merge` (`git merge --no-ff`
-into the trunk, cleanup, close the round); `implementation-review` (review the
-integrated trunk vs the full spec; approve → close the map and leave the
-trunk→base merge to the user; rework → spawn a successor review + fresh
-`unit-map` rework).
+into the trunk, cleanup, **self-closes** — the `development` round already
+self-closed at its commit); `implementation-review` (review the integrated
+trunk vs the full spec; approve → **self-close** and leave the trunk→base
+merge to the user — the `implementation-map` becomes unblocked (its last
+child closed) and closes via its own close-check; rework → spawn a successor
+review + fresh `unit-map` rework).
 
 **Branching.** One namespace keyed on the spec slug: trunk
 `implement/<spec-slug>` (cut from the current branch at kickoff, recorded as
