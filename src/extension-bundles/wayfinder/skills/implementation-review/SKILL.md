@@ -8,13 +8,13 @@ description: Wayfinder implementation — a wayfinder:implementation-review atom
 ## Facts
 
 - **Type:** `wayfinder:implementation-review` — **atomic** (renamed from `full-review`).
-- **Close:** **self** — at the user gate. On **approve**, also close the `implementation-map`. On **rework**, spawn a **successor** `implementation-review` (and stay closed itself) — one review per run, only the last passes.
+- **Close:** **self** — at the user gate. On **approve**, record the trunk approved + ready to land and **self-close only** (no skill closes another ticket: the `implementation-map` *becomes unblocked* once all its children are closed — this review included — and is picked up & closed via its own close-check). On **rework**, spawn a **successor** `implementation-review` (and stay closed itself) — one review per run, only the last passes.
 - **Repo write:** **read** — review the integrated trunk vs the full spec; never write.
 - **Spawns:** rework → successor `implementation-review` (its `Blocked by:` lists the fresh rework `unit-map`s) + fresh `unit-map` children.
 
 ## When this loads
 
-This skill loads when the overview dispatches an **open `wayfinder:implementation-review`**. It is the **terminal review** of the integrated trunk against the full spec — the approval gate that closes the `implementation-map`. `implementation-review` supersedes the old "full-review stays open through rework" doctrine: it is **atomic fire-and-forget**, so on rework it spawns a successor and self-closes (one review per run, only the last passes).
+This skill loads when the overview dispatches an **open `wayfinder:implementation-review`**. It is the **terminal review** of the integrated trunk against the full spec — the approval gate that clears the effort for landing (`implementation-review` self-closes; the `implementation-map` then becomes unblocked once all its children are closed and is picked up & closed via its own close-check). `implementation-review` supersedes the old "full-review stays open through rework" doctrine: it is **atomic fire-and-forget**, so on rework it spawns a successor and self-closes (one review per run, only the last passes).
 
 ## Eligibility — a runtime check (dynamic child set)
 
@@ -31,7 +31,7 @@ This skill loads when the overview dispatches an **open `wayfinder:implementatio
 
 The reviewer **never self-adjudicates**. After posting findings, stop and ask the user **one question — approve or rework**:
 
-- **Approve** → **close the `implementation-map` + self**. Record on this ticket that the trunk is **approved and ready to land**, and **leave the trunk→base (`implement/<spec-slug>` → base) merge to the user** — wayfinder approves; it does not land.
+- **Approve** → **self-close only**. Record on this ticket that the trunk is **approved and ready to land**, and **leave the trunk→base (`implement/<spec-slug>` → base) merge to the user** — wayfinder approves; it does not land. The `implementation-map` *becomes unblocked* once all its children are closed (this review included) and is picked up & closed via its own close-check.
 - **Rework** → spin off fresh `unit-map` children for the rework (recorded on the `implementation-map`), **spawn a successor `implementation-review`** (its `Blocked by:` lists those fresh rework `unit-map`s), then **self-close**. The successor is the next run's review; this one is done.
 
 Either way `implementation-review` self-closes at the gate — atomic fire-and-forget.
