@@ -1,11 +1,12 @@
 /**
- * Clear-then-inject — the shared "send" step for every wayfinder command.
+ * Clear-then-inject — the shared "send" step for the (single) wayfinder command.
  *
- * Each wayfinder command turns the agent into a wayfinder for one turn by
- * injecting an operating doctrine. To keep that doctrine the agent's entire
- * frame — unbiased by whatever the user and agent were just discussing — the
- * conversation is cleared **first** via `ctx.newSession(...)`, so the doctrine
- * becomes the first and only message of a fresh session.
+ * The `/wayfinder` command turns the agent into a wayfinder for one turn by
+ * injecting the always-injected overview + a one-line resolution directive.
+ * To keep that doctrine the agent's entire frame — unbiased by whatever the
+ * user and agent were just discussing — the conversation is cleared **first**
+ * via `ctx.newSession(...)`, so the doctrine becomes the first and only
+ * message of a fresh session.
  *
  * - **Busy (mid-stream):** refuse and warn the user to wait and re-run, rather
  *   than discard or preempt in-flight work.
@@ -28,12 +29,8 @@
 
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 
-/** The `customType` carried by each wayfinder doctrine message. */
-export type WayfinderDoctrineType =
-	| "wayfinder-chart"
-	| "wayfinder-ticket"
-	| "wayfinder-spec"
-	| "wayfinder-implement";
+/** The `customType` carried by the wayfinder overview doctrine message. */
+export type WayfinderDoctrineType = "wayfinder";
 
 /**
  * Clear the conversation, then inject `content` as the fresh session's sole
