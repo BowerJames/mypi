@@ -14,7 +14,7 @@ export interface CreateSkillOptions {
 }
 
 /**
- * Serialise a skill into the on-disk `SKILL.md` file content: YAML
+ * Serialise a skill into the on-disk skill file content: YAML
  * frontmatter wrapped in `---` fences, a blank line, then the body.
  *
  * Every frontmatter key is dumped (known fields + arbitrary
