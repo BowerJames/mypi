@@ -156,14 +156,14 @@ Any additional arguments passed on the command line are appended to the command.
 `mypi` expands each named bundle to the on-disk paths declared in its manifest and injects the appropriate flags into the `pi` command:
 
 - a bundle's pi-extensions → `-e <path>`
-- a bundle's skills → `--skill <path>`
+- a bundle's skills → materialised to `$MYPI_DIR/skills/<name>.md` (default `~/.mypi/skills/`), then `--skill <path>`
 - a bundle's prompts → `--prompt-template <path>`
 
-A bundle may declare `dependencies`; those bundles are auto-activated and their resources are emitted **first** (dependencies before dependents), so a skill whose `SKILL.md` uses dynamic `!` blocks always has the `dynamic-skills` extension loaded by the time it expands. Dependencies are resolved transitively and **deduplicated across the whole command** — listing a dep explicitly, or two bundles sharing a dep, never double-loads an extension (which would double-register its handlers). See [Bundle dependencies](#bundle-dependencies).
+A bundle may declare `dependencies`; those bundles are auto-activated and their resources are emitted **first** (dependencies before dependents), so a skill whose body uses dynamic `!` blocks always has the `dynamic-skills` extension loaded by the time it expands. Dependencies are resolved transitively and **deduplicated across the whole command** — listing a dep explicitly, or two bundles sharing a dep, never double-loads an extension (which would double-register its handlers). See [Bundle dependencies](#bundle-dependencies).
 
 You control everything else (model, tools, thinking level, etc.) with `pi`'s own flags on the `mypi` command line — they are forwarded to `pi` verbatim.
 
-Bundles live under `extension-bundles/<name>/` inside the installed package. Each bundle's `index.ts` manifest declares its resources as paths relative to itself, so they resolve wherever npm installs the package. A bundle may also declare `dependencies` (other bundle names); those are auto-activated alongside it — see [Bundle dependencies](#bundle-dependencies). `mypi --bundle <name>` applies the same expansion (see [Running pi directly](#running-pi-directly)).
+Bundles live under `extension-bundles/<name>/` inside the installed package. Each bundle's `index.ts` manifest declares its pi-extensions and prompts as paths relative to itself, so they resolve wherever npm installs the package. Skills are **defined in code** as `SkillContent` (frontmatter + body) and materialised to `$MYPI_DIR/skills/<name>.md` (default `~/.mypi/skills/`, overridable via the `MYPI_DIR` environment variable) at launch, then passed to pi via `--skill`. A bundle may also declare `dependencies` (other bundle names); those are auto-activated alongside it — see [Bundle dependencies](#bundle-dependencies). `mypi --bundle <name>` applies the same expansion (see [Running pi directly](#running-pi-directly)).
 
 ## Bundled Resources
 
@@ -174,11 +174,11 @@ mypi ships 12 **bundles**, each under `extension-bundles/<name>/`. Most contain 
 | `mode` | pi-extension | Plan/develop mode system — `/plan`, `/develop`, `/mode <name>` commands. Root branch auto-defaults to the current git branch on first start and persists (sticky across resume); set/clear via `/root-branch` (clear is sticky and suppresses re-defaulting) |
 | `btw` | pi-extension | Non-blocking one-off side tasks on a throwaway in-memory clone — `/btw <task>` runs in parallel without interrupting the main stream, and its result is shown in the TUI but kept out of the main agent's context. Each task is wrapped in a guardrail so the clone scopes itself to the side task and does not continue the main agent's work |
 | `loop` | pi-extension | Repeat messages until a terminal condition — `/loop [--terminal-regex <re>] [--max-iter <n>] --loop ["msg",...]` resets the session to the original point after every item (and between iterations) via tree navigation, so each item runs from a clean slate and the session ends back at the anchor |
-| `dynamic-skills` | pi-extension | Live shell execution inside skills — inline `!\`cmd\`` and fenced ```!``` blocks are replaced with their output at skill load (covers `/skill:name` and `read` of `SKILL.md`) |
+| `dynamic-skills` | pi-extension | Live shell execution inside skills — inline `!\`cmd\`` and fenced ```!``` blocks are replaced with their output at skill load (covers `/skill:name` and `read` of any registered skill file) |
 | `render-raw` | pi-extension | Append a raw (unformatted) rendering of the last assistant reply — `/render-raw` injects a custom-typed copy of the reply rendered as plain text (literal markdown), shown in the TUI but kept out of the main agent's context. Additive, not a toggle; a re-run against the same reply is a no-op |
 | `code-review` | pi-extension | Appends a "run an independent review before a PR" system-prompt section and provides `/code-review-model` to set the recommended review model (defaults to the active session model) |
 | `code-review-prompt` | prompt | Independent code review of an issue's implementation on a branch. Usage: `/code-review <issue_number> <branch_to_review> <target_branch_of_pr>` |
-| `repo-explorer` | skill | Explore third-party codebases/libraries/frameworks without cluttering the active workspace — clones into a `/tmp/repos/` cache and reuses existing checkouts. Auto-activates `dynamic-skills` (its `SKILL.md` uses dynamic `!` shell blocks) |
+| `repo-explorer` | skill | Explore third-party codebases/libraries/frameworks without cluttering the active workspace — clones into a `/tmp/repos/` cache and reuses existing checkouts. Auto-activates `dynamic-skills` (its body uses dynamic `!` shell blocks) |
 | `overview` | prompt | Overview of the repository, core components, and open issues |
 | `terminal-status` | pi-extension | Reflect session state in the terminal tab title — on `agent_start` sets the title to `working`, on `agent_settled` sets it to `idle`. Works in any terminal (TUI mode) by emitting the OSC 1 tab-title escape sequence (`\033]1;<title>\007`) to stdout. Best-effort: a failed write is swallowed. Note: pi's own window-title writes (OSC 0) can momentarily override the tab title on startup/session change |
 | `llm-wiki` | pi-extension | Turn the agent into a wiki manager for an [OKF](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) wiki (Karpathy's [LLM-wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)) — `/wiki-root`/`/wiki-spec` configure the bundle root and per-wiki spec doc (defaults `wiki/` and `/SPEC.md`), the spec is **auto-injected** into the system prompt each turn, `/wiki-init` scaffolds empty assets, and `/wiki-ingest`/`/wiki-query`/`/wiki-lint` inject the operating-model guidance |
@@ -190,7 +190,7 @@ Bundles are **composable**: a bundle's manifest may declare a `dependencies` fie
 
 Resolution rules:
 
-- **Dependencies-first.** A dependency's resources are always emitted before those of the bundle that needs them. For example, selecting `repo-explorer` (a skill whose `SKILL.md` uses dynamic `!` shell blocks) auto-activates `dynamic-skills` (the extension that expands those blocks) and emits its `-e` flag first.
+- **Dependencies-first.** A dependency's resources are always emitted before those of the bundle that needs them. For example, selecting `repo-explorer` (a skill whose body uses dynamic `!` shell blocks) auto-activates `dynamic-skills` (the extension that expands those blocks) and emits its `-e` flag first.
 - **Transitive.** If `a` depends on `b` and `b` depends on `c`, selecting `a` activates all three (`c`, then `b`, then `a`).
 - **Deduplicated across the whole command.** If two bundles share a dependency, or you list a dependency explicitly alongside a bundle that pulls it in, the shared dependency is loaded exactly once — never double-registering an extension's handlers via duplicate `-e` flags.
 - **Silent in `mypi configure`.** The editor only toggles the bundles you name; dependencies are pulled in at launch time, so you do not need to (and should not) select a dep explicitly.
@@ -198,7 +198,7 @@ Resolution rules:
 
 ### Dynamic Skills
 
-The `dynamic-skills` extension makes skills *live*: shell commands embedded in a `SKILL.md` body are executed at load time and replaced with their output. Two syntaxes are supported:
+The `dynamic-skills` extension makes skills *live*: shell commands embedded in a skill body are executed at load time and replaced with their output. Two syntaxes are supported:
 
 | Syntax | Scope | Example |
 |--------|-------|---------|
@@ -212,7 +212,7 @@ ls ~/.explore/repos
 ```
 ````
 
-Expansion runs on **both** skill-entry paths: the `/skill:<name>` command (intercepted before pi's built-in expansion) and the model `read`ing a registered `SKILL.md` (intercepted via the `read` tool result).
+Expansion runs on **both** skill-entry paths: the `/skill:<name>` command (intercepted before pi's built-in expansion) and the model `read`ing a registered skill file (intercepted via the `read` tool result).
 
 **Execution semantics:**
 

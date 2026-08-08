@@ -12,15 +12,30 @@
  * The assertion style is ported from the deleted `run.test.ts`.
  */
 import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { assemblePiArgv, parseBundleFlags } from "../cli.js";
 import { BUNDLES_DIR, expandBundleArgs } from "../resources.js";
+import { createSkill } from "../skill.js";
 
 // Paths resolved by the manifests live under dist/extension-bundles/<name>/
 // once built. For the expansion tests we assert the injected flag tokens and
 // that a path was produced; the on-disk-path assertions live in configure.test.ts
 // (which guards the build/copy step).
 const bundleEntry = (name: string) => resolve(BUNDLES_DIR, name);
+
+// Code-defined skills are materialised via `createSkill`, which writes to
+// disk. Mock it so expansion tests assert flag wiring without any OS writes;
+// the writer itself is unit-tested in skill.test.ts. The mock derives a
+// stable path from the skill name so assertions stay predictable.
+vi.mock("../skill.js", () => ({
+	createSkill: vi.fn(),
+}));
+
+const mockedCreateSkill = vi.mocked(createSkill);
+// Default: return a deterministic path per skill name (matches real createSkill
+// shape: <baseDir>/<name>.md) so no real file is touched.
+mockedCreateSkill.mockImplementation((skill) => `/mocked/${skill.frontMatter.name}.md`);
+const mockedSkillPath = (name: string) => `/mocked/${name}.md`;
 
 describe("expandBundleArgs — shared expander (deep module)", () => {
 	describe("expands a single bundle", () => {
@@ -40,10 +55,10 @@ describe("expandBundleArgs — shared expander (deep module)", () => {
 	describe("resolves dependencies deps-first", () => {
 		it("auto-activates a bundle's dependency, emitted first (repo-explorer -> dynamic-skills)", async () => {
 			const out = await expandBundleArgs(["repo-explorer"]);
-			// dynamic-skills (a pi-extension) must precede repo-explorer (a skill).
+			// dynamic-skills (a pi-extension) must precede repo-explorer (a materialised skill).
 			expect(out).toEqual(["-e", out[1], "--skill", out[3]]);
 			expect(out[1]).toContain(bundleEntry("dynamic-skills"));
-			expect(out[3]).toContain(bundleEntry("repo-explorer"));
+			expect(out[3]).toBe(mockedSkillPath("repo-explorer"));
 		});
 
 		it("auto-activates wayfinder's terminal-status dependency, emitted first", async () => {
@@ -62,7 +77,7 @@ describe("expandBundleArgs — shared expander (deep module)", () => {
 			expect(out).toEqual(["-e", out[1], "-e", out[3], "--skill", out[5]]);
 			expect(out[1]).toContain(bundleEntry("mode"));
 			expect(out[3]).toContain(bundleEntry("dynamic-skills"));
-			expect(out[5]).toContain(bundleEntry("repo-explorer"));
+			expect(out[5]).toBe(mockedSkillPath("repo-explorer"));
 		});
 
 		it("emits a shared transitive dependency exactly once, at its first occurrence", async () => {
@@ -75,7 +90,7 @@ describe("expandBundleArgs — shared expander (deep module)", () => {
 			expect(out[0]).toBe("-e");
 			expect(out[1]).toContain(bundleEntry("dynamic-skills"));
 			expect(out[2]).toBe("--skill");
-			expect(out[3]).toContain(bundleEntry("repo-explorer"));
+			expect(out[3]).toBe(mockedSkillPath("repo-explorer"));
 		});
 
 		it("emits a duplicated bundle exactly once", async () => {
@@ -83,7 +98,7 @@ describe("expandBundleArgs — shared expander (deep module)", () => {
 			// dynamic-skills once, repo-explorer once.
 			expect(out).toEqual(["-e", out[1], "--skill", out[3]]);
 			expect(out[1]).toContain(bundleEntry("dynamic-skills"));
-			expect(out[3]).toContain(bundleEntry("repo-explorer"));
+			expect(out[3]).toBe(mockedSkillPath("repo-explorer"));
 		});
 	});
 

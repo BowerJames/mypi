@@ -1,14 +1,24 @@
 import { existsSync } from "node:fs";
-import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { isValidProfileName, orderMultiSelectResult } from "../configure.js";
-import {
-	BUNDLES_DIR,
-	bundleExists,
-	discoverBundles,
-	expandBundle,
-	loadBundle,
-} from "../resources.js";
+import { getMypiSkillsDir } from "../mypi-dir.js";
+import { bundleExists, discoverBundles, expandBundle, loadBundle } from "../resources.js";
+import { createSkill } from "../skill.js";
+
+// `expandBundle` materialises code-defined skills via `createSkill`, which
+// writes to disk. The writer itself is unit-tested in skill.test.ts with
+// `node:fs` mocked; here we mock `createSkill` so these expansion tests verify
+// wiring (content → baseDir → overwrite option → returned path) without any OS
+// writes.
+vi.mock("../skill.js", () => ({
+	createSkill: vi.fn(),
+}));
+
+const mockedCreateSkill = vi.mocked(createSkill);
+
+beforeEach(() => {
+	mockedCreateSkill.mockReset();
+});
 
 describe("isValidProfileName", () => {
 	it("accepts simple names", () => {
@@ -97,10 +107,23 @@ describe("loadBundle / expandBundle", () => {
 		expect(existsSync(resolved.prompts[0])).toBe(true);
 	});
 
-	it("expands repo-explorer to a single skill path that exists on disk", async () => {
+	it("expands repo-explorer by materialising its skill via createSkill (no OS write)", async () => {
+		mockedCreateSkill.mockReturnValue("/mocked/repo-explorer.md");
 		const resolved = await expandBundle("repo-explorer");
-		expect(resolved.skills.length).toBe(1);
-		expect(existsSync(resolve(BUNDLES_DIR, "repo-explorer", "skills", "repo-explorer"))).toBe(true);
+
+		expect(resolved.skills).toEqual(["/mocked/repo-explorer.md"]);
+		expect(mockedCreateSkill).toHaveBeenCalledTimes(1);
+		expect(mockedCreateSkill).toHaveBeenCalledWith(
+			expect.objectContaining({
+				frontMatter: expect.objectContaining({
+					name: "repo-explorer",
+					description: expect.stringContaining("explore third party codebases"),
+				}),
+				body: expect.stringContaining("## Repository Cache"),
+			}),
+			getMypiSkillsDir(),
+			{ throwIfExists: false },
+		);
 	});
 
 	it("expands wayfinder to a single pi-extension file that exists on disk", async () => {

@@ -4,17 +4,20 @@
  * Bundles live alongside this module: at runtime under
  * `dist/extension-bundles/<name>/` (compiled from `src/extension-bundles/`),
  * and under source/test as `src/extension-bundles/<name>/`. Each bundle's
- * manifest declares the on-disk paths to its pi-extensions, skills, and
- * prompts, computed relative to itself via `import.meta.url`, so they resolve
- * wherever npm installs the package.
+ * manifest declares the on-disk paths to its pi-extensions and prompts,
+ * computed relative to itself via `import.meta.url`, so they resolve wherever
+ * npm installs the package. Skills are declared **in code** as `SkillContent`
+ * and materialised to `<$MYPI_DIR>/skills/<name>.md` at resolution time.
  *
  * `BUNDLES_DIR` is a *sibling* of this file (`dirname(import.meta.url)` +
  * `extension-bundles`), which holds in both layouts: `dist/extension-bundles`
  * at runtime and `src/extension-bundles` under vitest.
  *
- * mypi never imports the pi-extension/skill/prompt *code* — it only resolves
- * their paths and hands them to `pi` as `-e`/`--skill`/`--prompt-template`
- * flags. Manifests are loaded via dynamic `import()`, so resolution is async.
+ * mypi never imports the pi-extension/prompt *code* — it only resolves their
+ * paths and hands them to `pi` as `-e`/`--prompt-template` flags. Skill
+ * *content* is imported transitively via the manifest and written to disk as a
+ * `--skill` path. Manifests are loaded via dynamic `import()`, so resolution
+ * is async.
  *
  * Manifests are `.js` when compiled (runtime) and `.ts` under source (vitest);
  * both extensions are tolerated.
@@ -25,7 +28,9 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { throwError } from "./error.js";
 import type { ExtensionBundleManifest } from "./extension-bundle-manifest.js";
+import { getMypiSkillsDir } from "./mypi-dir.js";
 import type { ResolvedBundle } from "./resolved-bundle.js";
+import { createSkill } from "./skill.js";
 
 // ---------------------------------------------------------------------------
 // Paths
@@ -123,12 +128,21 @@ export async function loadBundle(name: string): Promise<ExtensionBundleManifest>
 
 /**
  * Resolve a bundle to its on-disk resource paths (all facets).
+ *
+ * pi-extensions and prompts are passed through as their declared paths.
+ * Skills are declared in code as `SkillContent`, so each one is materialised
+ * to `<$MYPI_DIR>/skills/<name>.md` (overwriting any prior copy — the
+ * manifest is the source of truth) and the written path is returned for
+ * `--skill`.
  */
 export async function expandBundle(name: string): Promise<ResolvedBundle> {
 	const manifest = await loadBundle(name);
+	const skills = manifest.skills.map((skill) =>
+		createSkill(skill, getMypiSkillsDir(), { throwIfExists: false }),
+	);
 	return {
 		piExtensions: [...manifest.piExtensions],
-		skills: [...manifest.skills],
+		skills,
 		prompts: [...manifest.prompts],
 	};
 }

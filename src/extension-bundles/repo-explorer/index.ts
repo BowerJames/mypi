@@ -1,15 +1,12 @@
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { ExtensionBundleManifest } from "../../extension-bundle-manifest.js";
-
-const here = dirname(fileURLToPath(import.meta.url));
+import repoExplorerSkill from "./skills/repo-explorer.js";
 
 export default {
 	name: "repo-explorer",
 	piExtensions: [],
-	skills: [join(here, "skills", "repo-explorer")],
+	skills: [repoExplorerSkill],
 	prompts: [],
-	// The repo-explorer skill uses dynamic `!` shell blocks in its SKILL.md,
-	// which only the dynamic-skills extension expands at load time.
+	// The repo-explorer skill uses dynamic `!` shell blocks in its body, which
+	// only the dynamic-skills extension expands at load time.
 	dependencies: ["dynamic-skills"],
 } satisfies ExtensionBundleManifest;
