@@ -2,13 +2,14 @@
 
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { ConfigError, loadConfig } from "./config.js";
+import type { Config } from "./cli-config.js";
+import { ConfigError, loadConfig } from "./cli-config.js";
 import { configureConfig } from "./configure.js";
 import { hasHelpFlag, printConfigureHelp, printInitHelp, printMainHelp } from "./help.js";
 import { writeDefaultConfig } from "./init.js";
+import type { Profile } from "./profile.js";
 import { expandBundleArgs } from "./resources.js";
 import { shellQuote, spawnShell } from "./shell.js";
-import type { Config, Profile } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Init command

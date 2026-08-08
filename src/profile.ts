@@ -1,5 +1,6 @@
 /**
- * Built-in profiles — always available, requiring no `mypi-config.yaml`.
+ * Profiles — the `Profile` shape plus the built-in profiles that ship with
+ * mypi and are always available (requiring no `mypi-config.yaml`).
  *
  * The user config file is an *overlay*: it can add new profiles, override a
  * built-in by name (replace, not merge-fields), and optionally set `default`.
@@ -11,7 +12,16 @@
  * provider/model that would go stale. A profile is just a named bundle-set.
  */
 
-import type { Profile } from "./types.js";
+/**
+ * A profile is a **named bundle-set**: an optional list of bundle names that
+ * mypi expands and runs under `pi`. The merged `mypi` always runs `pi`, so the
+ * per-profile `cmd` field is gone — a profile only selects which bundles are
+ * active. A profile with no bundles runs bare `pi`.
+ */
+export interface Profile {
+	/** Bundles to load, by name (deps-first, cross-union-deduped at expand time). */
+	bundles?: string[];
+}
 
 /**
  * The profile used when the user overlay does not set `default`.
