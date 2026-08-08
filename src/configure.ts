@@ -2,6 +2,7 @@ import { stdin as input, stdout as output } from "node:process";
 import { createInterface } from "node:readline/promises";
 import type { UserConfig } from "./cli-config.js";
 import { loadUserConfig, saveConfig } from "./cli-config.js";
+import { throwError } from "./error.js";
 import type { Profile } from "./profile.js";
 import { BUILTIN_DEFAULT, BUILTIN_PROFILES, isBuiltinProfile, mergeProfiles } from "./profile.js";
 import { discoverBundles } from "./resources.js";
@@ -95,7 +96,7 @@ async function promptChoice(
 	isCancelled: () => boolean,
 ): Promise<string> {
 	if (options.length === 0) {
-		throw new Error("No options available to choose from.");
+		throwError("No options available to choose from.");
 	}
 
 	while (true) {
