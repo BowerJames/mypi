@@ -1,5 +1,6 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { throwError } from "./error.js";
 
 /**
  * The starter overlay written by `mypi init`.
@@ -39,7 +40,7 @@ export function writeDefaultConfig(cwd: string): void {
 	const configPath = resolve(cwd, "mypi-config.yaml");
 
 	if (existsSync(configPath)) {
-		throw new Error("mypi-config.yaml already exists.");
+		throwError("mypi-config.yaml already exists.");
 	}
 
 	writeFileSync(configPath, DEFAULT_CONFIG_YAML, "utf-8");

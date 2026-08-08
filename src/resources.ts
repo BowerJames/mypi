@@ -23,6 +23,7 @@
 import { existsSync, readdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { throwError } from "./error.js";
 import type { ExtensionBundleManifest } from "./extension-bundle-manifest.js";
 import type { ResolvedBundle } from "./resolved-bundle.js";
 
@@ -99,7 +100,7 @@ export function bundleExists(name: string): boolean {
 export async function loadBundle(name: string): Promise<ExtensionBundleManifest> {
 	const path = manifestFile(name);
 	if (!path) {
-		throw new Error(
+		throwError(
 			`Bundle "${name}" not found. Expected a manifest at:\n` +
 				`  ${resolve(BUNDLES_DIR, name, "index.js")}`,
 		);
@@ -109,12 +110,12 @@ export async function loadBundle(name: string): Promise<ExtensionBundleManifest>
 	try {
 		mod = (await import(pathToFileURL(path).href)) as { default?: unknown };
 	} catch (err) {
-		throw new Error(`Failed to load bundle "${name}": ${(err as Error).message}`);
+		throwError(`Failed to load bundle "${name}": ${(err as Error).message}`);
 	}
 
 	const manifest = mod.default;
 	if (!manifest || typeof manifest !== "object") {
-		throw new Error(`Bundle "${name}" manifest has no valid default export.`);
+		throwError(`Bundle "${name}" manifest has no valid default export.`);
 	}
 
 	return manifest as ExtensionBundleManifest;
@@ -170,7 +171,7 @@ export async function activationOrder(
 	async function dfs(name: string, stack: string[]): Promise<void> {
 		// Cycle detection: `name` is already on the current DFS path.
 		if (stack.includes(name)) {
-			throw new Error(`Circular bundle dependency: ${[...stack, name].join(" -> ")}`);
+			throwError(`Circular bundle dependency: ${[...stack, name].join(" -> ")}`);
 		}
 		// Already fully resolved in a prior branch (diamond dedup).
 		if (visited.has(name)) return;
