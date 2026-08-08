@@ -156,14 +156,14 @@ Any additional arguments passed on the command line are appended to the command.
 `mypi` expands each named bundle to the on-disk paths declared in its manifest and injects the appropriate flags into the `pi` command:
 
 - a bundle's pi-extensions → `-e <path>`
-- a bundle's skills → `--skill <path>`
+- a bundle's skills → materialised to `$MYPI_DIR/skills/<name>.md` (default `~/.mypi/skills/`), then `--skill <path>`
 - a bundle's prompts → `--prompt-template <path>`
 
 A bundle may declare `dependencies`; those bundles are auto-activated and their resources are emitted **first** (dependencies before dependents), so a skill whose `SKILL.md` uses dynamic `!` blocks always has the `dynamic-skills` extension loaded by the time it expands. Dependencies are resolved transitively and **deduplicated across the whole command** — listing a dep explicitly, or two bundles sharing a dep, never double-loads an extension (which would double-register its handlers). See [Bundle dependencies](#bundle-dependencies).
 
 You control everything else (model, tools, thinking level, etc.) with `pi`'s own flags on the `mypi` command line — they are forwarded to `pi` verbatim.
 
-Bundles live under `extension-bundles/<name>/` inside the installed package. Each bundle's `index.ts` manifest declares its resources as paths relative to itself, so they resolve wherever npm installs the package. A bundle may also declare `dependencies` (other bundle names); those are auto-activated alongside it — see [Bundle dependencies](#bundle-dependencies). `mypi --bundle <name>` applies the same expansion (see [Running pi directly](#running-pi-directly)).
+Bundles live under `extension-bundles/<name>/` inside the installed package. Each bundle's `index.ts` manifest declares its pi-extensions and prompts as paths relative to itself, so they resolve wherever npm installs the package. Skills are **defined in code** as `SkillContent` (frontmatter + body) and materialised to `$MYPI_DIR/skills/<name>.md` (default `~/.mypi/skills/`, overridable via the `MYPI_DIR` environment variable) at launch, then passed to pi via `--skill`. A bundle may also declare `dependencies` (other bundle names); those are auto-activated alongside it — see [Bundle dependencies](#bundle-dependencies). `mypi --bundle <name>` applies the same expansion (see [Running pi directly](#running-pi-directly)).
 
 ## Bundled Resources
 
