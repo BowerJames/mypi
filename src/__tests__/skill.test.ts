@@ -124,4 +124,18 @@ describe("createSkill", () => {
 		const parsed = parseFrontmatter(written);
 		expect(parsed.body).toBe("");
 	});
+
+	it("serialises empty frontmatter to adjacent fences (---\n---\n) and round-trips to {}", () => {
+		const skill = makeSkill({
+			content: { frontMatter: {}, body: "do stuff" },
+		});
+
+		createSkill(skill);
+
+		const written = vi.mocked(writeFileSync).mock.calls[0]?.[1] as string;
+		expect(written).toBe("---\n---\n\ndo stuff\n");
+		const parsed = parseFrontmatter(written);
+		expect(parsed.frontmatter).toEqual({});
+		expect(parsed.body).toBe("do stuff");
+	});
 });

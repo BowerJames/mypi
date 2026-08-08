@@ -24,10 +24,13 @@ export interface CreateSkillOptions {
  * Every frontmatter key is dumped (known fields + arbitrary
  * `[key: string]` entries round-trip). The output matches what pi's
  * `parseFrontmatter` expects (leading `---`, a `\n---` close fence, body
- * trimmed on read).
+ * trimmed on read). Empty frontmatter serialises to adjacent fences
+ * (`---\n---\n`) rather than a flow-style `{}` block.
  */
 function serializeSkill(skill: Skill): string {
-	const frontmatterYaml = yaml.dump(skill.content.frontMatter, { lineWidth: -1 });
+	const frontMatter = skill.content.frontMatter;
+	const frontmatterYaml =
+		Object.keys(frontMatter).length > 0 ? yaml.dump(frontMatter, { lineWidth: -1 }) : "";
 	const body = skill.content.body.endsWith("\n") ? skill.content.body : `${skill.content.body}\n`;
 	return `---\n${frontmatterYaml}---\n\n${body}`;
 }
