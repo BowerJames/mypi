@@ -2,6 +2,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { UserConfig } from "../cli-config.js";
 import {
 	buildEffectiveConfig,
 	ConfigError,
@@ -9,9 +10,8 @@ import {
 	loadUserConfig,
 	saveConfig,
 	validateUserConfig,
-} from "../config.js";
-import { BUILTIN_DEFAULT, BUILTIN_PROFILES } from "../profiles.js";
-import type { UserConfig } from "../types.js";
+} from "../cli-config.js";
+import { BUILTIN_DEFAULT, BUILTIN_PROFILES } from "../profile.js";
 
 // ---------------------------------------------------------------------------
 // validateUserConfig (lenient overlay validation)

@@ -23,7 +23,8 @@
 import { existsSync, readdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import type { ExtensionBundleManifest, ResolvedBundle } from "./types.js";
+import type { ExtensionBundleManifest } from "./extension-bundle-manifest.js";
+import type { ResolvedBundle } from "./resolved-bundle.js";
 
 // ---------------------------------------------------------------------------
 // Paths

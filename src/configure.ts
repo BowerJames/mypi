@@ -1,9 +1,10 @@
 import { stdin as input, stdout as output } from "node:process";
 import { createInterface } from "node:readline/promises";
-import { loadUserConfig, saveConfig } from "./config.js";
-import { BUILTIN_DEFAULT, BUILTIN_PROFILES, isBuiltinProfile, mergeProfiles } from "./profiles.js";
+import type { UserConfig } from "./cli-config.js";
+import { loadUserConfig, saveConfig } from "./cli-config.js";
+import type { Profile } from "./profile.js";
+import { BUILTIN_DEFAULT, BUILTIN_PROFILES, isBuiltinProfile, mergeProfiles } from "./profile.js";
 import { discoverBundles } from "./resources.js";
-import type { Profile, UserConfig } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Validation

@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
+import type { Profile } from "../profile.js";
 import {
 	BUILTIN_DEFAULT,
 	BUILTIN_PROFILES,
 	effectiveDefault,
 	isBuiltinProfile,
 	mergeProfiles,
-} from "../profiles.js";
-import type { Profile } from "../types.js";
+} from "../profile.js";
 
 describe("BUILTIN_PROFILES", () => {
 	it("ships exactly the developer, llm-wiki, reviewer, and wayfinder profiles", () => {
