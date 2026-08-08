@@ -10,7 +10,9 @@ import { join } from "node:path";
  * npm installs this package.
  */
 export function getMypiDir(): string {
-	return process.env.MYPI_DIR ?? join(homedir(), ".mypi");
+	// `||` (not `??`) so an explicitly-empty MYPI_DIR falls back to the default
+	// instead of resolving to "" and silently writing into cwd.
+	return process.env.MYPI_DIR || join(homedir(), ".mypi");
 }
 
 /**

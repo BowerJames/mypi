@@ -30,6 +30,27 @@ function writeSkill(
 	return { name, filePath, baseDir: dir };
 }
 
+/** Flat-file skill: `<tmpDir>/<name>.md` (no SKILL.md subdir), mirroring how
+ *  mypi materialises code-defined skills to `$MYPI_DIR/skills/<name>.md`. */
+function writeFlatSkill(
+	name: string,
+	body: string,
+	frontmatter?: Record<string, string>,
+): {
+	name: string;
+	filePath: string;
+	baseDir: string;
+} {
+	const filePath = join(tmpDir, `${name}.md`);
+	const fm = frontmatter
+		? `---\n${Object.entries(frontmatter)
+				.map(([k, v]) => `${k}: ${v}`)
+				.join("\n")}\n---\n`
+		: "";
+	writeFileSync(filePath, `${fm}${body}`, "utf-8");
+	return { name, filePath, baseDir: tmpDir };
+}
+
 function execReturning(result: Partial<ExecResult>): ReturnType<typeof vi.fn> {
 	return vi.fn(async () => ({ stdout: "", stderr: "", code: 0, killed: false, ...result }));
 }
@@ -70,9 +91,11 @@ describe("handleReadResult — gates (passthrough)", () => {
 		const event = { toolName: "read", input: {}, content: [] } as unknown as ToolResultEvent;
 		await expect(handleReadResult(event, createMockCtx(), pi)).resolves.toBeUndefined();
 	});
-	it("passes through files not named SKILL.md", async () => {
+	it("passes through unregistered markdown files (e.g. a skill's bundled reference doc)", async () => {
 		const s = writeSkill("foo", "!`echo hi`");
 		const { pi } = createMockPi({ commands: skillCommands([s]) });
+		// REFERENCE.md sits inside a registered skill's dir but is not itself a
+		// registered skill path → passthrough (registration, not filename, is the gate).
 		const event = readEvent(join(s.baseDir, "REFERENCE.md"), "body !`echo hi`");
 		await expect(
 			handleReadResult(event, createMockCtx({ cwd: s.baseDir }), pi),
@@ -157,6 +180,25 @@ describe("handleReadResult — transformation", () => {
 		)) as {
 			content: Array<{ type: string; text: string }>;
 		};
+		expect(r.content[0].text).toContain("repo-a\nrepo-b");
+		expect(r.content[0].text).not.toContain("```!");
+	});
+
+	it("expands a registered flat-file skill (<name>.md, not SKILL.md) — regression for code-defined skills", async () => {
+		// mypi materialises code-defined skills as <name>.md (no SKILL.md subdir),
+		// so the read-path gate must key on registration, not the SKILL.md filename.
+		const s = writeFlatSkill("repo-explorer", "```!\nmkdir -p /tmp/repos\nls /tmp/repos\n```");
+		const exec = execReturning({ stdout: "repo-a\nrepo-b\n" });
+		const { pi } = createMockPi({ exec, commands: skillCommands([s]) });
+		const text = "---\nname: repo-explorer\n---\n```!\nmkdir -p /tmp/repos\nls /tmp/repos\n```";
+		const r = (await handleReadResult(
+			readEvent(s.filePath, text),
+			createMockCtx({ cwd: s.baseDir }),
+			pi,
+		)) as {
+			content: Array<{ type: string; text: string }>;
+		};
+		expect(r).toBeDefined();
 		expect(r.content[0].text).toContain("repo-a\nrepo-b");
 		expect(r.content[0].text).not.toContain("```!");
 	});

@@ -1,9 +1,3 @@
-/**
- * A single bundle of pi-extensions, skills, and prompts, identified by one
- * name and loaded as a unit. The paths are resolved on-disk by each bundle's
- * manifest (relative to its own location via `import.meta.url`) so they stay
- * correct wherever npm installs the package.
- */
 import type { SkillContent } from "./skill.js";
 
 /**

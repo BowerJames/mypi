@@ -19,6 +19,11 @@ describe("getMypiDir", () => {
 		expect(getMypiDir()).toBe(join(homedir(), ".mypi"));
 	});
 
+	it("falls back to ~/.mypi when MYPI_DIR is empty string (avoids writing into cwd)", () => {
+		process.env.MYPI_DIR = "";
+		expect(getMypiDir()).toBe(join(homedir(), ".mypi"));
+	});
+
 	it("honours MYPI_DIR when set", () => {
 		process.env.MYPI_DIR = "/custom/mypi";
 		expect(getMypiDir()).toBe("/custom/mypi");
